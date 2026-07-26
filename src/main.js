@@ -1,7 +1,7 @@
 // Une el motor, la pantalla y el sonido. Aca vive la interaccion.
 
 import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, xpNecesaria } from './engine/game.js';
-import { LADO, coordenadas, indice, BLOQUEADA } from './engine/board.js';
+import { LADO, coordenadas, indice, celdasDe, BLOQUEADA } from './engine/board.js';
 import { Escenario } from './render/stage.js';
 import { flotarPuntos } from './render/effects.js';
 import { PALETA, PALETA_CSS, COLORES_JEFE, intensidad } from './render/theme.js';
@@ -256,35 +256,57 @@ function colocar(indicePieza, celda) {
                                      estado.jefe ? 'malo' : '');
 }
 
+// Cuanto se levanta la pieza sobre el dedo, en celdas. Con 0 el dedo la tapa;
+// con mucho se despega y deja de sentirse agarrada.
+const LEVANTE = 1;
+
 /**
  * Convierte la posicion del dedo en la celda donde va el ORIGEN de la pieza.
  *
- * Dos ajustes que hacen la diferencia en el telefono:
- *  - La pieza se dibuja ~1.4 celdas arriba del dedo, porque si no el dedo tapa
- *    justo lo que estas intentando ver.
- *  - Se centra horizontalmente respecto al dedo: agarras la pieza del medio,
- *    no de su esquina de arriba a la izquierda.
+ * La pieza se agarra del CENTRO, no de su esquina de arriba a la izquierda, y
+ * en los dos ejes. Centrando solo a lo ancho, una pieza vertical de 4 se siente
+ * como si manejaras su segundo bloque en vez de la pieza entera.
+ *
+ * Encima de eso se levanta `LEVANTE` celdas, porque si no el dedo tapa justo lo
+ * que estas tratando de ver.
  */
 function celdaObjetivo(pieza, clientX, clientY) {
   const r = escenario.app.canvas.getBoundingClientRect();
   const paso = r.width / LADO;
-  const col = Math.floor((clientX - r.left) / paso);
-  const fila = Math.floor((clientY - r.top - paso * 1.4) / paso);
+  const colDedo = Math.floor((clientX - r.left) / paso);
+  const filaDedo = Math.floor((clientY - r.top) / paso);
 
   const xs = pieza.forma.map((p) => p[0]);
+  const ys = pieza.forma.map((p) => p[1]);
   const ancho = Math.max(...xs) - Math.min(...xs) + 1;
-  const colOrigen = col - Math.floor((ancho - 1) / 2);
+  const alto = Math.max(...ys) - Math.min(...ys) + 1;
 
-  const cf = Math.max(0, Math.min(LADO - 1, fila));
-  const cc = Math.max(0, Math.min(LADO - 1, colOrigen));
+  const colOrigen = colDedo - Math.floor((ancho - 1) / 2);
+  const filaOrigen = filaDedo - Math.floor((alto - 1) / 2) - LEVANTE;
+
+  // Se recorta para que la pieza ENTERA entre en el tablero, no solo su origen:
+  // si no, arrastrar hasta el borde deja media pieza afuera y la jugada se
+  // vuelve invalida por una razon que no se ve.
+  const cf = Math.max(0, Math.min(LADO - alto, filaOrigen));
+  const cc = Math.max(0, Math.min(LADO - ancho, colOrigen));
   return indice(cf, cc);
 }
 
 function previsualizarEn(indicePieza, celda) {
   const p = previsualizar(estado, indicePieza, celda);
   const pieza = estado.piezas[indicePieza];
+  // Cuando NO cabe se pinta igual la pieza entera, en rojo. Mostrar una sola
+  // celda deja al jugador sin saber que esta intentando poner ni contra que
+  // choca: se ve un cuadrito suelto y un cartel que dice que no cabe.
+  const celdas = p.valido
+    ? p.celdas
+    : celdasDe(pieza?.forma ?? [[0, 0]], celda).filter((c) => c >= 0);
+  // Las celdas que chocan se marcan mas fuerte: asi se ve DONDE esta el
+  // estorbo, no solo que hay uno.
+  const choques = p.valido ? [] : celdas.filter((c) => estado.tablero[c] !== null);
   escenario.pintarPreview({
-    celdas: p.valido ? p.celdas : [celda],
+    celdas,
+    choques,
     lineas: p.lineas,
     valido: p.valido,
     color: pieza ? pieza.color : 'cyan',

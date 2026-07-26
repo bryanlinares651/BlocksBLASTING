@@ -204,12 +204,17 @@ export class Escenario {
     });
   }
 
-  /** Marca dónde caería la pieza y qué líneas se limpiarían. `color` es un nombre. */
-  pintarPreview({ celdas = [], lineas = null, valido = true, color = 'cyan' }) {
+  /**
+   * Marca dónde caería la pieza y qué líneas se limpiarían. `color` es un
+   * nombre. `choques` son las celdas ocupadas que impiden la jugada: se pintan
+   * mas fuerte para que se vea DONDE esta el estorbo, no solo que existe.
+   */
+  pintarPreview({ celdas = [], choques = [], lineas = null, valido = true, color = 'cyan' }) {
     const pixel = this.pixelDe(color);
     this.capaPreview.removeChildren();
     if (celdas.length === 0 && !lineas) return;
     const g = new Graphics();
+    const ROJO = 0xff4d6d;
 
     if (lineas?.celdas?.length) {
       const tono = this.jefeActivo?.color ?? PALETA.ambar;
@@ -224,9 +229,11 @@ export class Escenario {
     for (const c of celdas) {
       const { x, y } = this.posicion(c);
       const lado = this.bloque * 1.06;
+      const choca = choques.includes(c);
+      const tono = valido ? pixel : ROJO;
       g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * RADIO)
-        .fill({ color: valido ? pixel : 0xff4d6d, alpha: valido ? 0.42 : 0.3 })
-        .stroke({ width: 2, color: valido ? pixel : 0xff4d6d, alpha: 0.85 });
+        .fill({ color: tono, alpha: valido ? 0.42 : (choca ? 0.55 : 0.22) })
+        .stroke({ width: choca ? 3 : 2, color: tono, alpha: choca ? 1 : 0.8 });
     }
     this.capaPreview.addChild(g);
   }
