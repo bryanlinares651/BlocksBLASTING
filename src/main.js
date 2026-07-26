@@ -313,11 +313,15 @@ function engancharPieza(el, i) {
   });
 }
 
+// Cuanto puede salirse el dedo del tablero sin que se corte el preview. Hacia
+// afuera es seguro: da holgura en los bordes sin crear zonas muertas adentro.
+const HOLGURA = 70;
+
 function moverArrastre(ev) {
   if (!arrastre) return;
   const pieza = estado.piezas[arrastre.pieza];
   if (!pieza) return;
-  if (!escenario.dentro(ev.clientX, ev.clientY + 40)) {
+  if (!escenario.dentro(ev.clientX, ev.clientY, HOLGURA)) {
     escenario.limpiarPreview();
     arrastre.celda = null;
     estadoTexto(estado.jefe ? estado.jefe.nombre : 'Tu turno', estado.jefe ? 'malo' : '');
@@ -382,10 +386,14 @@ async function iniciar() {
       return;
     }
 
+    // Con una pieza ya elegida, tocar el tablero NO coloca de una: empieza a
+    // apuntar. Ves el preview mientras tengas el dedo abajo, lo corres si no te
+    // gusta, y recien al soltar se coloca. Colocar en el pointerdown hacia que
+    // la pieza cayera antes de que pudieras ver donde iba a caer.
     if (estado.seleccionada !== null && !arrastre) {
-      const p = previsualizar(estado, estado.seleccionada, celda);
-      if (p.valido) colocar(estado.seleccionada, celda);
-      else { sonido.rechazo(); aviso('Ahí no cabe'); }
+      arrastre = { pieza: estado.seleccionada, celda: null };
+      document.body.classList.add('arrastrando');
+      moverArrastre(ev);
     }
   });
 

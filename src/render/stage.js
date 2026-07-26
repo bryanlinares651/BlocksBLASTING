@@ -326,10 +326,19 @@ export class Escenario {
     return indice(fila, col);
   }
 
-  /** ¿El punto cae dentro del tablero? Sirve para saber si soltar o cancelar. */
-  dentro(clientX, clientY) {
+  /**
+   * ¿El punto cae dentro del tablero?
+   *
+   * `margen` ensancha el area hacia AFUERA, nunca hacia adentro. Un margen
+   * negativo (o sumarle pixeles a la coordenada antes de preguntar) crea una
+   * franja muerta en el borde donde el dedo ya esta sobre el tablero pero el
+   * codigo cree que no, y ahi el preview desaparece justo cuando mas se
+   * necesita: al entrar desde la bandeja, que esta pegada abajo.
+   */
+  dentro(clientX, clientY, margen = 0) {
     const r = this.app.canvas.getBoundingClientRect();
-    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+    return clientX >= r.left - margen && clientX <= r.right + margen
+        && clientY >= r.top - margen && clientY <= r.bottom + margen;
   }
 
   centroDe(i) {
