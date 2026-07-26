@@ -729,3 +729,52 @@ html[data-tema="jugoso"] .mini span,
 html[data-tema="jugoso"] .pieza-flotante i {
   border-radius: calc(var(--lado, 15px) * 0.3);
 }
+
+
+/* --- Cartel de "vas a romper N lineas" --- */
+
+.tablero-caja { position: relative; }
+
+/* Va ENCIMA del tablero y sin capturar toques: es un aviso, no un boton.
+   El resaltado de las celdas ya late en el canvas; esto le pone el numero,
+   porque contar ocho celdas iluminadas mientras arrastras no es razonable. */
+.rompe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 140ms var(--salida-firme), transform 200ms var(--salida);
+  z-index: 5;
+  mix-blend-mode: screen;
+}
+
+.rompe[data-visible="1"] { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+.rompe span {
+  display: block;
+  font-size: 68px;
+  font-weight: 800;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+  color: var(--p-ambar);
+  text-shadow:
+    0 0 24px color-mix(in oklab, var(--p-ambar) 75%, transparent),
+    0 0 60px color-mix(in oklab, var(--p-ambar) 45%, transparent);
+}
+
+.rompe small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: var(--p-ambar);
+  text-shadow: 0 0 18px color-mix(in oklab, var(--p-ambar) 60%, transparent);
+}
+
+/* Con jefe activo hereda su color, para que se lea como "esto pasa ahora" */
+.rompe[data-jefe="1"] span,
+.rompe[data-jefe="1"] small { color: var(--jefe); }

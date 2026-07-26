@@ -389,12 +389,19 @@ function previsualizarEn(indicePieza, celda) {
     valido: p.valido,
     color: pieza ? pieza.color : 'cyan',
   });
+  const rompe = $('rompe');
   if (p.valido && p.lineas?.cantidad) {
     const n = p.lineas.cantidad;
+    $('rompe-numero').textContent = n;
+    $('rompe-texto').textContent = n === 1 ? 'LÍNEA' : 'LÍNEAS';
+    rompe.dataset.visible = '1';
+    rompe.dataset.jefe = estado.jefe ? '1' : '0';
     estadoTexto(n === 1 ? 'Se va 1 línea' : `Se van ${n} líneas`, 'bien');
   } else if (p.valido) {
+    rompe.dataset.visible = '0';
     estadoTexto('Cabe acá');
   } else {
+    rompe.dataset.visible = '0';
     estadoTexto('Ahí no cabe', 'malo');
   }
 }
@@ -446,6 +453,7 @@ function moverArrastre(ev) {
 
   if (!escenario.dentro(ev.clientX, ev.clientY, HOLGURA)) {
     escenario.limpiarPreview();
+    $('rompe').dataset.visible = '0';
     arrastre.celda = null;
     estadoTexto(estado.jefe ? estado.jefe.nombre : 'Tu turno', estado.jefe ? 'malo' : '');
     return;
@@ -462,6 +470,7 @@ function soltarArrastre() {
   arrastre = null;
   document.body.classList.remove('arrastrando');
   flotante.soltar();
+  $('rompe').dataset.visible = '0';
   if (celda === null) {
     escenario.limpiarPreview();
     return;

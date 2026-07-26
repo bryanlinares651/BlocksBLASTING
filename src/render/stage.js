@@ -9,6 +9,9 @@ import { TEMAS, paletaDe } from './temas.js';
 const RADIO = 0.22;   // esquinas, como fraccion del lado del bloque
 const HUECO = 0.085;  // separacion entre celdas
 
+// La celda VACIA va casi recta, independiente del tema: es fondo, no pieza.
+const RADIO_CELDA_VACIA = 0.06;
+
 export class Escenario {
   constructor(contenedor, { reducido = false, tema = TEMAS[0] } = {}) {
     this.contenedor = contenedor;
@@ -159,13 +162,21 @@ export class Escenario {
     return this.paleta[color] ?? PALETA[color] ?? TEMA.tintaSuave;
   }
 
+  /**
+   * Las celdas vacias van casi rectas y mas apagadas que los bloques.
+   *
+   * Con el mismo redondeo que las piezas, la cuadricula vacia se lee como un
+   * monton de cuadritos grises sueltos compitiendo por atencion — Bryan lo
+   * describio exacto. Rectas y tenues, la cuadricula desaparece y lo unico que
+   * se ve son las piezas, que es lo que importa.
+   */
   dibujarFondo() {
     this.capaFondo.removeChildren();
     const g = new Graphics();
+    const radio = this.bloque * RADIO_CELDA_VACIA;
     for (let i = 0; i < LADO * LADO; i++) {
       const { x, y } = this.posicion(i);
-      g.roundRect(x - this.bloque / 2, y - this.bloque / 2, this.bloque, this.bloque,
-                  this.bloque * (this.tema?.bloque?.radio ?? RADIO))
+      g.roundRect(x - this.bloque / 2, y - this.bloque / 2, this.bloque, this.bloque, radio)
         .fill(this.tema?.fondo?.celda ?? TEMA.celda);
     }
     this.capaFondo.addChild(g);
@@ -232,19 +243,37 @@ export class Escenario {
    * mas fuerte para que se vea DONDE esta el estorbo, no solo que existe.
    */
   pintarPreview({ celdas = [], choques = [], lineas = null, valido = true, color = 'cyan' }) {
-    const pixel = this.pixelDe(color);
+    // Se guarda y lo dibuja el ticker: las lineas que se van a romper LATEN, y
+    // para eso hay que repintarlas cada cuadro.
+    this.preview = { celdas, choques, lineas, valido, pixel: this.pixelDe(color) };
+    if (celdas.length === 0 && !lineas) this.preview = null;
+    this.dibujarPreview();
+  }
+
+  dibujarPreview() {
     this.capaPreview.removeChildren();
-    if (celdas.length === 0 && !lineas) return;
+    if (!this.preview) return;
+    const { celdas, choques, lineas, valido, pixel } = this.preview;
     const g = new Graphics();
     const ROJO = 0xff4d6d;
+    const radio = this.tema?.bloque?.radio ?? RADIO;
 
+    // LAS LINEAS QUE SE VAN A ROMPER.
+    //
+    // Antes esto iba con alpha 0.22, que sobre un fondo oscuro es practicamente
+    // invisible: la informacion mas importante del juego — "si soltas aca,
+    // rompes" — estaba ahi y no se veia. Ahora late entre 0.42 y 0.72, lleva
+    // borde brillante y las celdas crecen un poco. Tiene que gritar.
     if (lineas?.celdas?.length) {
       const tono = this.jefeActivo?.color ?? PALETA.ambar;
+      const pulso = 0.42 + Math.sin(this.tiempoPreview * 6.5) * 0.15 + 0.15;
+      const crece = 1 + Math.sin(this.tiempoPreview * 6.5) * 0.035;
       for (const c of lineas.celdas) {
         const { x, y } = this.posicion(c);
-        g.roundRect(x - this.celda / 2, y - this.celda / 2, this.celda, this.celda,
-                    this.celda * (this.tema?.bloque?.radio ?? RADIO))
-          .fill({ color: tono, alpha: 0.22 });
+        const lado = this.celda * crece;
+        g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * radio)
+          .fill({ color: tono, alpha: pulso })
+          .stroke({ width: 2.5, color: tono, alpha: 0.95 });
       }
     }
 
@@ -253,14 +282,15 @@ export class Escenario {
       const lado = this.bloque * 1.06;
       const choca = choques.includes(c);
       const tono = valido ? pixel : ROJO;
-      g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * (this.tema?.bloque?.radio ?? RADIO))
-        .fill({ color: tono, alpha: valido ? 0.42 : (choca ? 0.55 : 0.22) })
-        .stroke({ width: choca ? 3 : 2, color: tono, alpha: choca ? 1 : 0.8 });
+      g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * radio)
+        .fill({ color: tono, alpha: valido ? 0.55 : (choca ? 0.55 : 0.22) })
+        .stroke({ width: choca ? 3 : 2.5, color: tono, alpha: choca ? 1 : 0.95 });
     }
     this.capaPreview.addChild(g);
   }
 
   limpiarPreview() {
+    this.preview = null;
     this.capaPreview.removeChildren();
   }
 
@@ -301,6 +331,11 @@ export class Escenario {
     this.efectos.actualizar(dt);
     this.temblor.actualizar(dt);
     this.destello.actualizar(dt);
+
+    // Las lineas a punto de romperse laten. Solo se repinta si hay algo que
+    // late: repintar una vista previa quieta en cada cuadro es tirar trabajo.
+    this.tiempoPreview = (this.tiempoPreview ?? 0) + dt;
+    if (this.preview?.lineas?.celdas?.length) this.dibujarPreview();
 
     for (let i = this.animaciones.length - 1; i >= 0; i--) {
       const a = this.animaciones[i];

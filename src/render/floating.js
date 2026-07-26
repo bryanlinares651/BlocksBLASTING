@@ -10,7 +10,10 @@
 // el tablero (la pieza tiene que poder verse tambien sobre la bandeja, que esta
 // afuera), y `transform` lo compone la placa de video sin repintar nada.
 
-const SEGUIMIENTO = 26;   // que tan rapido alcanza al dedo; mas alto = mas pegado
+// Mas alto = mas pegado al dedo. En 26 todavia se sentia un pelin de arrastre;
+// en 38 la pieza va practicamente bajo el dedo pero conserva el suavizado que
+// evita que se vea a saltos cuando el dedo se mueve rapido.
+const SEGUIMIENTO = 38;
 
 export class PiezaFlotante {
   constructor(contenedor) {
