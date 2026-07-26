@@ -4,12 +4,13 @@ import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import { LADO, coordenadas, indice, BLOQUEADA } from '../engine/board.js';
 import { TEMA, PALETA, NOMBRES_COLOR, COLORES_PIEZA, BASURA, oklchAHex, intensidad, CURVAS } from './theme.js';
 import { Explosiones, Temblor, Destello } from './effects.js';
+import { TEMAS, paletaDe } from './temas.js';
 
 const RADIO = 0.22;   // esquinas, como fraccion del lado del bloque
 const HUECO = 0.085;  // separacion entre celdas
 
 export class Escenario {
-  constructor(contenedor, { reducido = false } = {}) {
+  constructor(contenedor, { reducido = false, tema = TEMAS[0] } = {}) {
     this.contenedor = contenedor;
     this.reducido = reducido;
     this.app = new Application();
@@ -18,6 +19,26 @@ export class Escenario {
     this.animaciones = [];
     this.jefeActivo = null;
     this.pulso = 0;
+    this.tema = tema;
+    this.paleta = paletaDe(tema).pixi;
+  }
+
+  /**
+   * Cambia el tema en caliente: nueva paleta, texturas nuevas y fondo nuevo.
+   * Los bloques que ya estan en el tablero se repintan con el color del tema
+   * que les toca, asi la partida no queda mezclando dos estilos.
+   */
+  aplicarTema(tema) {
+    this.tema = tema;
+    this.paleta = paletaDe(tema).pixi;
+    for (const t of this.texturas.values()) t.destroy(true);
+    this.texturas.clear();
+    this.texturaSellada?.destroy(true);
+    this.generarTexturas();
+    this.dibujarFondo();
+    for (const [i, s] of this.bloques) {
+      s.texture = this.texturaDe(s.__color);
+    }
   }
 
   async iniciar() {
@@ -83,7 +104,7 @@ export class Escenario {
    */
   generarTexturas() {
     const lado = Math.ceil(this.bloque * 2); // al doble, para que no pixele al escalar
-    const r = lado * RADIO;
+    const r = lado * (this.tema?.bloque?.radio ?? RADIO);
 
     const construir = (hex, hexClaro, hexOscuro) => {
       const g = new Graphics();
@@ -98,13 +119,14 @@ export class Escenario {
 
     // Las texturas se indexan por NOMBRE de color, igual que las guarda el motor.
     for (const nombre of NOMBRES_COLOR) {
-      const c = COLORES_PIEZA[nombre];
+      const c = this.tema.piezas[nombre] ?? COLORES_PIEZA[nombre];
+      const b = this.tema.bloque;
       this.texturas.set(
         nombre,
         construir(
-          PALETA[nombre],
-          oklchAHex(Math.min(0.98, c.L + 0.16), c.C * 0.7, c.H),
-          oklchAHex(Math.max(0.05, c.L - 0.24), c.C * 0.85, c.H)
+          this.paleta[nombre],
+          oklchAHex(Math.min(0.98, c.L + 0.16 * (b.brillo / 0.6)), c.C * 0.7, c.H),
+          oklchAHex(Math.max(0.05, c.L - 0.24 * (b.sombra / 0.26)), c.C * 0.85, c.H)
         )
       );
     }
@@ -134,7 +156,7 @@ export class Escenario {
   /** Color de particula para un nombre de color del motor. */
   pixelDe(color) {
     if (color === BLOQUEADA) return TEMA.bordeVivo;
-    return PALETA[color] ?? TEMA.tintaSuave;
+    return this.paleta[color] ?? PALETA[color] ?? TEMA.tintaSuave;
   }
 
   dibujarFondo() {
@@ -143,8 +165,8 @@ export class Escenario {
     for (let i = 0; i < LADO * LADO; i++) {
       const { x, y } = this.posicion(i);
       g.roundRect(x - this.bloque / 2, y - this.bloque / 2, this.bloque, this.bloque,
-                  this.bloque * RADIO)
-        .fill(TEMA.celda);
+                  this.bloque * (this.tema?.bloque?.radio ?? RADIO))
+        .fill(this.tema?.fondo?.celda ?? TEMA.celda);
     }
     this.capaFondo.addChild(g);
   }
@@ -221,7 +243,7 @@ export class Escenario {
       for (const c of lineas.celdas) {
         const { x, y } = this.posicion(c);
         g.roundRect(x - this.celda / 2, y - this.celda / 2, this.celda, this.celda,
-                    this.celda * RADIO)
+                    this.celda * (this.tema?.bloque?.radio ?? RADIO))
           .fill({ color: tono, alpha: 0.22 });
       }
     }
@@ -231,7 +253,7 @@ export class Escenario {
       const lado = this.bloque * 1.06;
       const choca = choques.includes(c);
       const tono = valido ? pixel : ROJO;
-      g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * RADIO)
+      g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * (this.tema?.bloque?.radio ?? RADIO))
         .fill({ color: tono, alpha: valido ? 0.42 : (choca ? 0.55 : 0.22) })
         .stroke({ width: choca ? 3 : 2, color: tono, alpha: choca ? 1 : 0.8 });
     }

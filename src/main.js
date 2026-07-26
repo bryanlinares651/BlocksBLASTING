@@ -1,12 +1,13 @@
 // Une el motor, la pantalla y el sonido. Aca vive la interaccion.
 
-import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, xpNecesaria } from './engine/game.js';
+import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, xpNecesaria } from './engine/game.js';
 import { LADO, coordenadas, indice, celdasDe, BLOQUEADA } from './engine/board.js';
 import { Escenario } from './render/stage.js';
 import { flotarPuntos } from './render/effects.js';
 import { PiezaFlotante } from './render/floating.js';
 import { PALETA, PALETA_CSS, COLORES_JEFE, intensidad } from './render/theme.js';
 import { Sonido } from './audio/sfx.js';
+import { TEMAS, temaPorId, siguienteTema, aplicarCss, paletaDe } from './render/temas.js';
 
 const $ = (id) => document.getElementById(id);
 const GUARDADO = 'nova-blocks-v1';
@@ -17,6 +18,8 @@ let escenario;
 let flotante;
 let estado;
 let apuntando = null;   // 'bomba' | 'rayo' cuando se esta eligiendo donde
+let temaActual = TEMAS[0];
+let consejoVisible = null;
 let arrastre = null;    // { pieza, celda } mientras el dedo esta abajo
 
 // ---------------------------------------------------------------- persistencia
@@ -71,7 +74,7 @@ function cssDeNumero(hex) {
 
 /** Nombre de color del motor -> string CSS. */
 function cssDeNombre(nombre) {
-  return PALETA_CSS[nombre] ?? PALETA_CSS.cyan;
+  return paletaDe(temaActual).texto[nombre] ?? PALETA_CSS[nombre] ?? PALETA_CSS.cyan;
 }
 
 function pintarMarcadores() {
@@ -85,8 +88,10 @@ function pintarMarcadores() {
 
   $('cuenta-bomba').textContent = estado.poderes.bomba;
   $('cuenta-rayo').textContent = estado.poderes.rayo;
+  $('cuenta-lampara').textContent = estado.poderes.lampara ?? 0;
   $('btn-bomba').disabled = estado.poderes.bomba === 0;
   $('btn-rayo').disabled = estado.poderes.rayo === 0;
+  $('btn-lampara').disabled = !estado.poderes.lampara;
 }
 
 function pintarJefe() {
@@ -161,6 +166,64 @@ function anunciarJefe(suceso) {
   setTimeout(() => { capa.hidden = true; }, reducido ? 700 : 1500);
 }
 
+/** El contador de racha, arriba del tablero. Desaparece solo al cortarse. */
+function pintarCombo(combo, centro = null) {
+  const el = $('combo');
+  if (combo < 2) {
+    el.dataset.visible = '0';
+    return;
+  }
+  el.dataset.visible = '1';
+  el.querySelector('.combo-numero').textContent = `×${combo}`;
+  // Reiniciar la animacion: sin esto, el segundo combo seguido no late.
+  el.classList.remove('late');
+  void el.offsetWidth;
+  el.classList.add('late');
+  if (centro) {
+    flotarPuntos($('flotantes'), `COMBO ×${combo}`, centro.x, centro.y - 34,
+                 cssDeNombre('rosa'));
+  }
+}
+
+/**
+ * Tablero limpio: la jugada mas dificil. Paga bonus Y cambia el tema, que es
+ * la idea de Bryan — la recompensa no es solo un numero, es ver algo nuevo.
+ */
+function celebrarTableroLimpio(suceso) {
+  sonido.tableroLimpio();
+  const capa = $('capa-limpio');
+  const nuevo = siguienteTema(temaActual.id);
+  $('limpio-bonus').textContent = `+${suceso.bonus.toLocaleString('es')}`;
+  $('limpio-tema').textContent = nuevo.nombre;
+  $('limpio-lema').textContent = nuevo.lema;
+  capa.hidden = false;
+
+  // El cambio ocurre a mitad de la animacion, con la pantalla tapada: si se
+  // cambiara a la vista, se ven las texturas viejas un cuadro y parpadea.
+  setTimeout(() => {
+    temaActual = nuevo;
+    aplicarCss(nuevo);
+    escenario.aplicarTema(nuevo);
+    escenario.efectos.aplicarTema?.(nuevo);
+    pintarBandeja();
+  }, reducido ? 60 : 420);
+
+  setTimeout(() => { capa.hidden = true; }, reducido ? 500 : 1900);
+}
+
+/** La lampara: marca la jugada aconsejada hasta que hagas otra cosa. */
+function mostrarConsejo(suceso) {
+  consejoVisible = suceso;
+  const pieza = estado.piezas[suceso.indicePieza];
+  estado = { ...estado, seleccionada: suceso.indicePieza };
+  pintarBandeja();
+  previsualizarEn(suceso.indicePieza, suceso.celda);
+  sonido.subirNivel();
+  aviso(suceso.lineas > 0
+    ? `Ahí rompés ${suceso.lineas === 1 ? '1 línea' : `${suceso.lineas} líneas`}`
+    : 'Ahí es donde mejor encaja');
+}
+
 /** Traduce lo que dice el motor en animacion y sonido. */
 function procesar(sucesos, tableroAntes) {
   for (const s of sucesos) {
@@ -174,13 +237,26 @@ function procesar(sucesos, tableroAntes) {
         escenario.reventarCeldas(s.celdas, tableroAntes, s.cantidad);
         sonido.limpiar(s.cantidad, fuerza.semitonos);
         const centro = escenario.centroDe(s.celdas[Math.floor(s.celdas.length / 2)]);
-        const puntos = s.cantidad * s.cantidad * 70;
+        const puntos = s.puntos ?? s.cantidad * s.cantidad * 70;
         flotarPuntos($('flotantes'), `+${puntos.toLocaleString('es')}`, centro.x, centro.y,
-                     PALETA_CSS.ambar);
+                     cssDeNombre('ambar'));
+        pintarCombo(s.combo ?? 0, centro);
         const cuantas = s.cantidad === 1 ? '1 línea' : `${s.cantidad} líneas`;
         estadoTexto(s.cantidad >= 3 ? `¡${cuantas}!` : `${cuantas} fuera`, 'bien');
         break;
       }
+
+      case 'combo-cortado':
+        pintarCombo(0);
+        break;
+
+      case 'tablero-limpio':
+        celebrarTableroLimpio(s);
+        break;
+
+      case 'consejo':
+        mostrarConsejo(s);
+        break;
 
       case 'subio-nivel':
         sonido.subirNivel();
@@ -407,7 +483,8 @@ async function iniciar() {
   const guardado = cargarGuardado();
   estado = nuevaPartida({ monedas: guardado.monedas ?? 120, mejor: guardado.mejor ?? 0 });
 
-  escenario = await new Escenario($('tablero'), { reducido }).iniciar();
+  aplicarCss(temaActual);
+  escenario = await new Escenario($('tablero'), { reducido, tema: temaActual }).iniciar();
   flotante = new PiezaFlotante($('flotantes'));
   window.addEventListener('resize', () => flotante.redimensionar(escenario.ladoCeldaEnPantalla()));
   pintarTodo();
@@ -470,6 +547,16 @@ async function iniciar() {
     });
   }
 
+  $('btn-lampara').addEventListener('click', () => {
+    sonido.despertar();
+    const r = usarLampara(estado);
+    estado = r.estado;
+    procesar(r.sucesos, estado.tablero);
+    pintarMarcadores();
+    if (r.sucesos[0]?.razon === 'sin-consejo') aviso('No hay jugada que valga la pena');
+    guardar();
+  });
+
   $('btn-tienda').addEventListener('click', () => { $('capa-tienda').hidden = false; });
   $('cerrar-tienda').addEventListener('click', () => { $('capa-tienda').hidden = true; });
   $('capa-tienda').addEventListener('click', (ev) => {
@@ -498,6 +585,10 @@ async function iniciar() {
 
   const reiniciar = () => {
     estado = nuevaPartida({ monedas: estado.monedas, mejor: estado.mejor });
+    temaActual = TEMAS[0];
+    aplicarCss(temaActual);
+    escenario.aplicarTema(temaActual);
+    pintarCombo(0);
     escenario.efectos.limpiar();
     escenario.limpiarPreview();
     $('capa-fin').hidden = true;

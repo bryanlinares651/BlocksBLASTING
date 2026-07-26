@@ -74,6 +74,10 @@
   <section class="tablero-marco">
     <div class="tablero-cabeza">
       <h2>8 × 8</h2>
+      <div id="combo" class="combo" data-visible="0" aria-live="polite">
+        <span class="combo-etiqueta">COMBO</span>
+        <span class="combo-numero">×2</span>
+      </div>
       <span id="estado" class="estado">Tu turno</span>
     </div>
     <div id="tablero" class="tablero"></div>
@@ -100,6 +104,14 @@
         </span>
         <span id="cuenta-rayo" class="cuenta">0</span>
       </button>
+      <button id="btn-lampara" class="poder" disabled>
+        <span class="poder-icono">✦</span>
+        <span class="poder-texto">
+          <b>Lámpara</b>
+          <small>Te muestra la mejor jugada</small>
+        </span>
+        <span id="cuenta-lampara" class="cuenta">0</span>
+      </button>
     </div>
     <button id="btn-tienda" class="tienda-abrir">Canjear monedas</button>
   </section>
@@ -124,6 +136,11 @@
       <span class="poder-icono">═</span>
       <span class="poder-texto"><b>Rayo</b><small>Limpia una fila entera</small></span>
       <span class="precio">60</span>
+    </button>
+    <button class="articulo" data-comprar="lampara">
+      <span class="poder-icono">✦</span>
+      <span class="poder-texto"><b>Lámpara</b><small>Te muestra la mejor jugada</small></span>
+      <span class="precio">50</span>
     </button>
     <button class="articulo" data-comprar="revolver">
       <span class="poder-icono">⟳</span>
@@ -150,6 +167,19 @@
     <span class="anuncio-etiqueta">Aparece</span>
     <strong id="anuncio-nombre">EL BLOQUEADOR</strong>
     <p id="anuncio-regla">Sella 3 celdas.</p>
+  </div>
+</div>
+
+<!-- Tablero limpio: bonus y cambio de tema -->
+<div id="capa-limpio" class="capa capa-limpio" hidden aria-hidden="true">
+  <div class="limpio">
+    <span class="limpio-titulo">¡TABLERO LIMPIO!</span>
+    <strong id="limpio-bonus" class="limpio-bonus">+2.000</strong>
+    <div class="limpio-tema">
+      <span class="limpio-cambio">Cambia el estilo</span>
+      <b id="limpio-tema">NEÓN</b>
+      <small id="limpio-lema">Máquina de salón</small>
+    </div>
   </div>
 </div>
 

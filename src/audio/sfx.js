@@ -156,6 +156,17 @@ export class Sonido {
     this.pulso(8);
   }
 
+  /** Tablero limpio: la fanfarria mas larga del juego. Se la gana. */
+  tableroLimpio() {
+    [0, 4, 7, 12, 16, 19].forEach((s, i) => {
+      setTimeout(() => this.tono({
+        hz: semitonos(BASE, s), tipo: 'triangle', duracion: 0.3, volumen: 0.32,
+      }), i * 85);
+    });
+    setTimeout(() => this.ruido({ duracion: 0.6, volumen: 0.24, corte: 2600 }), 120);
+    this.pulso([30, 50, 30, 50, 80]);
+  }
+
   finDelJuego() {
     [0, -3, -7, -12].forEach((s, i) => {
       setTimeout(() => this.tono({
