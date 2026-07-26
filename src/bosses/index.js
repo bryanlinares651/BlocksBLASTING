@@ -14,7 +14,7 @@
 
 import { BLOQUEADA, celdasVacias, LADO } from '../engine/board.js';
 
-const COLOR_BASURA = '#5b6480';
+const COLOR_BASURA = 'basura';
 
 function alAzar(lista, azar) {
   return lista[Math.floor(azar() * lista.length)];

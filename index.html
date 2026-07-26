@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Nova Blocks</title>
+<meta name="description" content="Juego de bloques con jefes que cambian las reglas.">
+
+<!-- Para que el iPhone lo instale como aplicacion y no como pagina -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nova">
+<meta name="theme-color" content="#0a0d1c">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icono-180.png">
+<link rel="icon" type="image/png" href="/icono-192.png">
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+<main class="app">
+
+  <header class="barra">
+    <div class="marca">
+      <div class="sello">◆</div>
+      <div>
+        <h1>NOVA BLOCKS</h1>
+        <p id="racha">Arma. Revienta. Aguanta.</p>
+      </div>
+    </div>
+    <div class="acciones">
+      <button id="btn-sonido" class="icono" aria-label="Silenciar">♪</button>
+      <button id="btn-reiniciar" class="icono" aria-label="Empezar de nuevo">↻</button>
+    </div>
+  </header>
+
+  <section class="marcadores">
+    <div class="dato">
+      <span class="etiqueta">Puntaje</span>
+      <strong id="puntaje">0</strong>
+    </div>
+    <div class="dato">
+      <span class="etiqueta">Monedas</span>
+      <strong id="monedas" class="oro">120</strong>
+    </div>
+    <div class="dato">
+      <span class="etiqueta">Mejor</span>
+      <strong id="mejor">0</strong>
+    </div>
+  </section>
+
+  <section class="nivel">
+    <div class="nivel-fila">
+      <span>Nivel <b id="nivel">1</b></span>
+      <span id="xp-texto">0 / 500</span>
+    </div>
+    <div class="progreso"><i id="barra"></i></div>
+  </section>
+
+  <!-- Banda del jefe: solo aparece cuando hay uno -->
+  <section id="banda-jefe" class="banda-jefe" hidden>
+    <div class="jefe-cara">
+      <strong id="jefe-nombre">EL BLOQUEADOR</strong>
+      <span id="jefe-turnos" class="jefe-turnos">8</span>
+    </div>
+    <p id="jefe-regla">Sella 3 celdas.</p>
+  </section>
+
+  <section class="tablero-marco">
+    <div class="tablero-cabeza">
+      <h2>8 × 8</h2>
+      <span id="estado" class="estado">Tu turno</span>
+    </div>
+    <div id="tablero" class="tablero"></div>
+    <div id="bandeja" class="bandeja"></div>
+    <p id="pista" class="pista">Arrastrá una pieza al tablero</p>
+  </section>
+
+  <section class="panel">
+    <h3>Poderes</h3>
+    <div class="poderes">
+      <button id="btn-bomba" class="poder" disabled>
+        <span class="poder-icono">◎</span>
+        <span class="poder-texto">
+          <b>Bomba</b>
+          <small>Revienta un 3×3 donde toques</small>
+        </span>
+        <span id="cuenta-bomba" class="cuenta">0</span>
+      </button>
+      <button id="btn-rayo" class="poder" disabled>
+        <span class="poder-icono">═</span>
+        <span class="poder-texto">
+          <b>Rayo</b>
+          <small>Limpia la fila que toques</small>
+        </span>
+        <span id="cuenta-rayo" class="cuenta">0</span>
+      </button>
+    </div>
+    <button id="btn-tienda" class="tienda-abrir">Canjear monedas</button>
+  </section>
+
+</main>
+
+<div id="flotantes" class="flotantes" aria-hidden="true"></div>
+
+<!-- Tienda -->
+<div id="capa-tienda" class="capa" hidden>
+  <div class="hoja" role="dialog" aria-label="Tienda">
+    <div class="hoja-cabeza">
+      <h2>Canjear</h2>
+      <button id="cerrar-tienda" class="icono" aria-label="Cerrar">×</button>
+    </div>
+    <button class="articulo" data-comprar="bomba">
+      <span class="poder-icono">◎</span>
+      <span class="poder-texto"><b>Bomba</b><small>Revienta un 3×3</small></span>
+      <span class="precio">40</span>
+    </button>
+    <button class="articulo" data-comprar="rayo">
+      <span class="poder-icono">═</span>
+      <span class="poder-texto"><b>Rayo</b><small>Limpia una fila entera</small></span>
+      <span class="precio">60</span>
+    </button>
+    <button class="articulo" data-comprar="revolver">
+      <span class="poder-icono">⟳</span>
+      <span class="poder-texto"><b>Revolver</b><small>Cambia tus piezas actuales</small></span>
+      <span class="precio">80</span>
+    </button>
+  </div>
+</div>
+
+<!-- Fin del juego -->
+<div id="capa-fin" class="capa" hidden>
+  <div class="hoja hoja-fin" role="dialog" aria-label="Fin del juego">
+    <p class="fin-titulo">Se acabaron las movidas</p>
+    <strong id="fin-puntaje" class="fin-puntaje">0</strong>
+    <p id="fin-mejor" class="fin-mejor"></p>
+    <p id="fin-jefes" class="fin-jefes"></p>
+    <button id="btn-otra" class="principal">Otra partida</button>
+  </div>
+</div>
+
+<!-- Anuncio del jefe -->
+<div id="capa-jefe" class="capa capa-jefe" hidden aria-hidden="true">
+  <div class="anuncio">
+    <span class="anuncio-etiqueta">Aparece</span>
+    <strong id="anuncio-nombre">EL BLOQUEADOR</strong>
+    <p id="anuncio-regla">Sella 3 celdas.</p>
+  </div>
+</div>
+
+<div id="aviso" class="aviso" role="status"></div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

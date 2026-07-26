@@ -1,7 +1,11 @@
 // Las formas que salen y como se reparten los tres turnos.
 // Cada forma es una lista de [x, y] con el origen en la esquina de arriba a la izquierda.
 
-export const COLORES = ['#ff6fba', '#5ce1e6', '#ffd166', '#8f86ff', '#70e07b', '#ff9566'];
+// El motor guarda el NOMBRE del color, no su valor. Traducir nombre -> pixel es
+// tarea del render, y solo de el. Cuando el motor guardaba strings tipo
+// '#ff6fba' y PixiJS esperaba numeros, las piezas salian grises sin ningun
+// error en consola: un choque de tipos silencioso.
+export const COLORES = ['rosa', 'cyan', 'ambar', 'violeta', 'verde', 'naranja'];
 
 export const FORMAS = {
   punto: [[0, 0]],

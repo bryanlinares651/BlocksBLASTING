@@ -1,0 +1,341 @@
+// El tablero dibujado con PixiJS: celdas, bloques, vista previa y la explosion.
+
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
+import { LADO, coordenadas, indice, BLOQUEADA } from '../engine/board.js';
+import { TEMA, PALETA, NOMBRES_COLOR, COLORES_PIEZA, BASURA, oklchAHex, intensidad, CURVAS } from './theme.js';
+import { Explosiones, Temblor, Destello } from './effects.js';
+
+const RADIO = 0.22;   // esquinas, como fraccion del lado del bloque
+const HUECO = 0.085;  // separacion entre celdas
+
+export class Escenario {
+  constructor(contenedor, { reducido = false } = {}) {
+    this.contenedor = contenedor;
+    this.reducido = reducido;
+    this.app = new Application();
+    this.texturas = new Map();
+    this.bloques = new Map();      // indice de celda -> Sprite
+    this.animaciones = [];
+    this.jefeActivo = null;
+    this.pulso = 0;
+  }
+
+  async iniciar() {
+    const lado = this.medirLado();
+    await this.app.init({
+      width: lado,
+      height: lado,
+      backgroundAlpha: 0,
+      antialias: true,
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      autoDensity: true,
+      preference: 'webgl',
+    });
+    this.contenedor.appendChild(this.app.canvas);
+
+    this.mundo = new Container();
+    this.capaFondo = new Container();
+    this.capaBloques = new Container();
+    this.capaPreview = new Container();
+    this.mundo.addChild(this.capaFondo, this.capaBloques, this.capaPreview);
+
+    this.efectos = new Explosiones(this.app, { reducido: this.reducido });
+    this.destello = new Destello(this.app);
+    this.app.stage.addChild(this.mundo, this.efectos.capa, this.destello.capa);
+
+    this.temblor = new Temblor(this.mundo);
+    this.calcularMedidas();
+    this.generarTexturas();
+    this.dibujarFondo();
+
+    this.app.ticker.add((tick) => this.actualizar(tick.deltaMS / 1000));
+    window.addEventListener('resize', () => this.redimensionar());
+    return this;
+  }
+
+  medirLado() {
+    const ancho = this.contenedor.clientWidth || 340;
+    // Se deja aire para que el tablero no toque los bordes de la pantalla en
+    // pantallas altas; el limite de 520 evita un tablero gigante en tablet.
+    return Math.max(280, Math.min(ancho, 520));
+  }
+
+  calcularMedidas() {
+    const total = this.app.screen.width;
+    this.celda = total / LADO;
+    this.hueco = this.celda * HUECO;
+    this.bloque = this.celda - this.hueco;
+    this.pisoY = total + this.celda; // las particulas rebotan un poco abajo del tablero
+  }
+
+  posicion(i) {
+    const { fila, columna } = coordenadas(i);
+    return {
+      x: columna * this.celda + this.celda / 2,
+      y: fila * this.celda + this.celda / 2,
+    };
+  }
+
+  /**
+   * Una textura por color, con el brillo interno ya dibujado. No se usa `tint`
+   * sobre una textura blanca porque el tinte multiplica, y eso apagaria el
+   * brillo superior en vez de dejarlo claro.
+   */
+  generarTexturas() {
+    const lado = Math.ceil(this.bloque * 2); // al doble, para que no pixele al escalar
+    const r = lado * RADIO;
+
+    const construir = (hex, hexClaro, hexOscuro) => {
+      const g = new Graphics();
+      g.roundRect(0, lado * 0.08, lado, lado * 0.92, r).fill(hexOscuro);     // sombra corta
+      g.roundRect(0, 0, lado, lado * 0.92, r).fill(hex);                      // cuerpo
+      g.roundRect(lado * 0.12, lado * 0.08, lado * 0.76, lado * 0.3, r * 0.7)
+        .fill({ color: hexClaro, alpha: 0.55 });                              // luz de arriba
+      const t = this.app.renderer.generateTexture(g);
+      g.destroy();
+      return t;
+    };
+
+    // Las texturas se indexan por NOMBRE de color, igual que las guarda el motor.
+    for (const nombre of NOMBRES_COLOR) {
+      const c = COLORES_PIEZA[nombre];
+      this.texturas.set(
+        nombre,
+        construir(
+          PALETA[nombre],
+          oklchAHex(Math.min(0.98, c.L + 0.16), c.C * 0.7, c.H),
+          oklchAHex(Math.max(0.05, c.L - 0.24), c.C * 0.85, c.H)
+        )
+      );
+    }
+
+    // Basura del jefe Basurero: gris tintado, sin brillo vivo, para que se lea
+    // como estorbo y no como una pieza mas.
+    this.texturas.set(
+      BASURA,
+      construir(oklchAHex(0.48, 0.02, 265), oklchAHex(0.6, 0.015, 265), oklchAHex(0.3, 0.02, 265))
+    );
+    this.texturaSellada = (() => {
+      const g = new Graphics();
+      g.roundRect(0, 0, lado, lado, r).fill(TEMA.sellada);
+      g.roundRect(lado * 0.1, lado * 0.1, lado * 0.8, lado * 0.8, r * 0.6)
+        .stroke({ width: lado * 0.06, color: TEMA.bordeVivo, alpha: 0.9 });
+      const t = this.app.renderer.generateTexture(g);
+      g.destroy();
+      return t;
+    })();
+  }
+
+  texturaDe(color) {
+    if (color === BLOQUEADA) return this.texturaSellada;
+    return this.texturas.get(color) ?? this.texturas.get(BASURA);
+  }
+
+  /** Color de particula para un nombre de color del motor. */
+  pixelDe(color) {
+    if (color === BLOQUEADA) return TEMA.bordeVivo;
+    return PALETA[color] ?? TEMA.tintaSuave;
+  }
+
+  dibujarFondo() {
+    this.capaFondo.removeChildren();
+    const g = new Graphics();
+    for (let i = 0; i < LADO * LADO; i++) {
+      const { x, y } = this.posicion(i);
+      g.roundRect(x - this.bloque / 2, y - this.bloque / 2, this.bloque, this.bloque,
+                  this.bloque * RADIO)
+        .fill(TEMA.celda);
+    }
+    this.capaFondo.addChild(g);
+  }
+
+  /** Sincroniza los sprites con el tablero del motor. */
+  pintarTablero(tablero, { animarNuevas = [] } = {}) {
+    for (let i = 0; i < tablero.length; i++) {
+      const color = tablero[i];
+      const existente = this.bloques.get(i);
+
+      if (color === null) {
+        if (existente) {
+          this.capaBloques.removeChild(existente);
+          existente.destroy();
+          this.bloques.delete(i);
+        }
+        continue;
+      }
+
+      if (existente && existente.__color === color) continue;
+      if (existente) {
+        this.capaBloques.removeChild(existente);
+        existente.destroy();
+      }
+
+      const s = new Sprite(this.texturaDe(color));
+      s.anchor.set(0.5);
+      s.width = this.bloque;
+      s.height = this.bloque;
+      s.__color = color;
+      const { x, y } = this.posicion(i);
+      s.x = x;
+      s.y = y;
+      this.capaBloques.addChild(s);
+      this.bloques.set(i, s);
+
+      if (animarNuevas.includes(i)) this.animarAsentado(s);
+    }
+  }
+
+  /** La pieza se asienta: entra a 1.15 y baja a 1. No aparece de golpe. */
+  animarAsentado(sprite) {
+    const base = this.bloque;
+    this.animaciones.push({
+      t: 0,
+      ms: 180,
+      paso: (p) => {
+        const e = CURVAS.salidaFirme(p);
+        const escala = 1.15 - 0.15 * e;
+        sprite.width = base * escala;
+        sprite.height = base * escala;
+      },
+      fin: () => {
+        sprite.width = base;
+        sprite.height = base;
+      },
+    });
+  }
+
+  /** Marca dónde caería la pieza y qué líneas se limpiarían. `color` es un nombre. */
+  pintarPreview({ celdas = [], lineas = null, valido = true, color = 'cyan' }) {
+    const pixel = this.pixelDe(color);
+    this.capaPreview.removeChildren();
+    if (celdas.length === 0 && !lineas) return;
+    const g = new Graphics();
+
+    if (lineas?.celdas?.length) {
+      const tono = this.jefeActivo?.color ?? PALETA.ambar;
+      for (const c of lineas.celdas) {
+        const { x, y } = this.posicion(c);
+        g.roundRect(x - this.celda / 2, y - this.celda / 2, this.celda, this.celda,
+                    this.celda * RADIO)
+          .fill({ color: tono, alpha: 0.22 });
+      }
+    }
+
+    for (const c of celdas) {
+      const { x, y } = this.posicion(c);
+      const lado = this.bloque * 1.06;
+      g.roundRect(x - lado / 2, y - lado / 2, lado, lado, lado * RADIO)
+        .fill({ color: valido ? pixel : 0xff4d6d, alpha: valido ? 0.42 : 0.3 })
+        .stroke({ width: 2, color: valido ? pixel : 0xff4d6d, alpha: 0.85 });
+    }
+    this.capaPreview.addChild(g);
+  }
+
+  limpiarPreview() {
+    this.capaPreview.removeChildren();
+  }
+
+  /**
+   * El momento importante: las celdas revientan. Cuantas mas lineas, mas
+   * pedazos, mas temblor y mas destello — todo escala junto.
+   */
+  reventarCeldas(celdas, tablero, cantidadLineas) {
+    const fuerza = intensidad(cantidadLineas);
+    for (const c of celdas) {
+      const { x, y } = this.posicion(c);
+      const color = tablero[c];
+      const sprite = this.bloques.get(c);
+      if (sprite) {
+        this.capaBloques.removeChild(sprite);
+        sprite.destroy();
+        this.bloques.delete(c);
+      }
+      this.efectos.reventar(
+        x, y, this.bloque,
+        this.pixelDe(color),
+        fuerza.particulas,
+        this.pisoY
+      );
+    }
+    if (!this.reducido) {
+      this.temblor.golpear(fuerza.temblor, fuerza.msTemblor);
+      this.destello.disparar(fuerza.destello);
+    }
+    return fuerza;
+  }
+
+  marcarJefe(jefe) {
+    this.jefeActivo = jefe;
+  }
+
+  actualizar(dt) {
+    this.efectos.actualizar(dt);
+    this.temblor.actualizar(dt);
+    this.destello.actualizar(dt);
+
+    for (let i = this.animaciones.length - 1; i >= 0; i--) {
+      const a = this.animaciones[i];
+      a.t += dt * 1000;
+      const p = Math.min(1, a.t / a.ms);
+      a.paso(p);
+      if (p >= 1) {
+        a.fin?.();
+        this.animaciones.splice(i, 1);
+      }
+    }
+
+    // Latido del borde mientras hay jefe
+    if (this.jefeActivo) {
+      this.pulso += dt;
+      const v = 0.5 + Math.sin(this.pulso * Math.PI) * 0.5;
+      this.capaFondo.alpha = 0.75 + v * 0.25;
+    } else {
+      this.capaFondo.alpha = 1;
+      this.pulso = 0;
+    }
+  }
+
+  redimensionar() {
+    const lado = this.medirLado();
+    if (Math.abs(lado - this.app.screen.width) < 2) return;
+    this.app.renderer.resize(lado, lado);
+    this.calcularMedidas();
+    this.temblor.recentrar(0, 0);
+    this.destello.redibujar();
+    for (const t of this.texturas.values()) t.destroy(true);
+    this.texturas.clear();
+    this.texturaSellada?.destroy(true);
+    this.generarTexturas();
+    this.dibujarFondo();
+    for (const [i, s] of this.bloques) {
+      const { x, y } = this.posicion(i);
+      s.texture = this.texturaDe(s.__color);
+      s.x = x;
+      s.y = y;
+      s.width = this.bloque;
+      s.height = this.bloque;
+    }
+  }
+
+  /** Traduce un toque en pantalla al indice de celda. */
+  celdaEn(clientX, clientY) {
+    const r = this.app.canvas.getBoundingClientRect();
+    const col = Math.floor(((clientX - r.left) / r.width) * LADO);
+    const fila = Math.floor(((clientY - r.top) / r.height) * LADO);
+    if (col < 0 || col >= LADO || fila < 0 || fila >= LADO) return null;
+    return indice(fila, col);
+  }
+
+  /** ¿El punto cae dentro del tablero? Sirve para saber si soltar o cancelar. */
+  dentro(clientX, clientY) {
+    const r = this.app.canvas.getBoundingClientRect();
+    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+  }
+
+  centroDe(i) {
+    const r = this.app.canvas.getBoundingClientRect();
+    const { x, y } = this.posicion(i);
+    const escala = r.width / this.app.screen.width;
+    return { x: r.left + x * escala, y: r.top + y * escala };
+  }
+}
