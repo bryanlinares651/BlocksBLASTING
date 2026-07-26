@@ -37,7 +37,15 @@ export default defineConfig({
         // El juego entero cabe de sobra en el cache: se guarda todo y abre sin
         // internet. El limite por defecto (2 MB) deja afuera el bundle de Pixi.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2,webmanifest}'],
+        // Explicitos aunque 'autoUpdate' ya los active: la version nueva toma
+        // el control apenas se instala, en vez de esperar a que se cierren
+        // todas las pestañas viejas. Junto con el 'controllerchange' de
+        // main.js, publicar un arreglo llega al telefono en una sola recarga.
+        clientsClaim: true,
+        skipWaiting: true,
+        // Sin esto, una version vieja del juego queda guardada para siempre.
+        cleanupOutdatedCaches: true,
       },
       devOptions: { enabled: false },
     }),

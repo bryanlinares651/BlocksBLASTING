@@ -466,4 +466,22 @@ async function iniciar() {
   };
 }
 
+/**
+ * Recargar sola cuando llega una version nueva.
+ *
+ * Sin esto, el service worker sirve la copia guardada y lo nuevo recien aparece
+ * a la SEGUNDA recarga: se publica un arreglo y el telefono sigue mostrando lo
+ * viejo. Aca se puede recargar sin avisar porque no hay nada que perder: el
+ * record y las monedas viven en localStorage, no en la pagina. El candado evita
+ * el bucle si el navegador avisa dos veces.
+ */
+if ('serviceWorker' in navigator) {
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
+}
+
 iniciar();
