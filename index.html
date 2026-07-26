@@ -12,10 +12,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Nova">
 <meta name="theme-color" content="#0a0d1c">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icono-180.png">
-<link rel="icon" type="image/png" href="/icono-192.png">
-<link rel="stylesheet" href="/src/styles.css">
+<!-- OJO: el enlace al manifest NO va escrito aca. Lo inyecta vite-plugin-pwa al
+     construir, ya con la ruta base correcta. Escribirlo a mano con una ruta
+     absoluta ("/manifest.webmanifest") apunta a la raiz del dominio, y en
+     GitHub Pages el sitio cuelga de /<repo>/: quedaban dos enlaces, el
+     navegador obedecia al roto, y sin manifest valido el iPhone no ofrece
+     instalar la aplicacion. Las rutas de aca abajo van con "./" por lo mismo. -->
+<link rel="apple-touch-icon" href="./icono-180.png">
+<link rel="icon" type="image/png" href="./icono-192.png">
+<link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
 <main class="app">
@@ -150,6 +155,6 @@
 
 <div id="aviso" class="aviso" role="status"></div>
 
-<script type="module" src="/src/main.js"></script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>
