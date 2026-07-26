@@ -19,10 +19,20 @@ export function monedasPorLineas(lineas) {
 }
 
 /**
- * Combo: jugadas SEGUIDAS que limpiaron algo. Una jugada que no limpia lo corta.
+ * Cuantas jugadas sin limpiar aguanta una racha antes de cortarse.
  *
- * El multiplicador crece de a poco (x1, x1.5, x2, x2.5...) y se topa en x5.
- * Sin tope, una racha larga vuelve irrelevante todo lo demas del juego; sin
+ * Con 0 (cortar a la primera) el combo era cuestion de suerte: acomodar una
+ * pieza para preparar la jugada grande — que es exactamente lo que el juego
+ * pide — te mataba la racha. Con 2 podes armar la jugada sin perderla.
+ */
+export const GRACIA_COMBO = 2;
+
+/**
+ * Combo: jugadas que limpiaron algo, encadenadas con hasta GRACIA_COMBO jugadas
+ * de descanso entre medio.
+ *
+ * El multiplicador crece de a poco (x1, x1.5, x2, x2.5...) y se topa en x5. Sin
+ * tope, una racha larga vuelve irrelevante todo lo demas del juego; sin
  * crecimiento, encadenar no se siente distinto a limpiar suelto.
  */
 export function multiplicadorCombo(combo) {

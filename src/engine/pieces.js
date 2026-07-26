@@ -66,6 +66,35 @@ export function repartir(cantidad = 3, azar = Math.random, desde = NOMBRES) {
   return Array.from({ length: cantidad }, () => crearPieza(azar, desde));
 }
 
+/**
+ * Reparte piezas garantizando que AL MENOS UNA entre en el tablero.
+ *
+ * Sin esto, el juego podia matarte por mala suerte: colocabas tus tres piezas,
+ * te repartia tres nuevas al azar y si ninguna entraba, se acabo — sin que
+ * hubieras jugado mal. Bryan lo sufrio y tiene razon: la gracia del juego es
+ * que te den piezas que caben y vos pienses donde ponerlas, no que el azar
+ * decida cuando perdes.
+ *
+ * Se prueban varios repartos; si ninguno sirve, se busca a mano una forma que
+ * entre y se mete en el set. Solo si NINGUNA forma del catalogo entra se
+ * devuelve un reparto cualquiera — ahi el tablero esta ahogado de verdad y
+ * perder es legitimo.
+ */
+export function repartirJugable(tablero, cabe, cantidad = 3, azar = Math.random, desde = NOMBRES, intentos = 24) {
+  for (let i = 0; i < intentos; i++) {
+    const piezas = repartir(cantidad, azar, desde);
+    if (piezas.some((p) => cabe(tablero, p.forma))) return piezas;
+  }
+
+  // Ningun reparto al azar sirvio: buscar explicitamente una forma que entre.
+  const rescate = desde.find((nombre) => cabe(tablero, FORMAS[nombre]));
+  if (!rescate) return repartir(cantidad, azar, desde);   // tablero ahogado de verdad
+
+  const piezas = repartir(cantidad, azar, desde);
+  piezas[0] = crearPieza(azar, [rescate]);
+  return piezas;
+}
+
 export function formasDisponibles(piezas) {
   return piezas.filter((p) => !p.usada).map((p) => p.forma);
 }

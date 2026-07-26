@@ -6,17 +6,17 @@ import {
   crearTablero, puedeColocar, colocar, lineasCompletas, limpiar,
   hayMovimiento, simular, BLOQUEADA,
 } from './board.js';
-import { repartir, formasDisponibles, NOMBRES, GRANDES } from './pieces.js';
+import { repartir, repartirJugable, formasDisponibles, NOMBRES, GRANDES } from './pieces.js';
 import {
   puntosPorColocar, puntosPorLineas, monedasPorLineas, aplicarXp, xpNecesaria,
-  multiplicadorCombo, BONUS_TABLERO_LIMPIO,
+  multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO,
 } from './scoring.js';
 import { tocaJefe, elegirJefe, activar, avanzar, PRIMER_UMBRAL } from '../bosses/index.js';
 
 export function nuevaPartida({ azar = Math.random, monedas = 120, mejor = 0 } = {}) {
   return {
     tablero: crearTablero(),
-    piezas: repartir(3, azar),
+    piezas: repartir(3, azar),   // tablero vacio: cualquier reparto entra
     seleccionada: null,
     puntaje: 0,
     monedas,
@@ -28,6 +28,7 @@ export function nuevaPartida({ azar = Math.random, monedas = 120, mejor = 0 } = 
     jefesVencidos: [],
     proximoJefeEn: PRIMER_UMBRAL,
     combo: 0,            // jugadas seguidas que limpiaron algo
+    graciaUsada: 0,      // jugadas sin limpiar que lleva la racha actual
     mejorCombo: 0,
     tablerosLimpiados: 0,
     turno: 0,
@@ -49,7 +50,22 @@ function catalogo(estado) {
 function rellenarSiHaceFalta(estado, sucesos) {
   if (!estado.piezas.every((p) => p.usada)) return estado;
   sucesos.push({ tipo: 'piezas-nuevas' });
-  return { ...estado, piezas: repartir(cuantasPiezas(estado), estado.azar, catalogo(estado)) };
+  // Reparto JUSTO: al menos una de las tres tiene que entrar en el tablero que
+  // hay ahora. Perder porque el azar te dio tres piezas que no caben no es
+  // perder, es que el juego te penalice sin motivo.
+  return {
+    ...estado,
+    piezas: repartirJugable(estado.tablero, puedeColocarEnAlgunLado,
+                            cuantasPiezas(estado), estado.azar, catalogo(estado)),
+  };
+}
+
+/** ¿Esta forma entra en algun lugar del tablero? */
+function puedeColocarEnAlgunLado(tablero, forma) {
+  for (let i = 0; i < tablero.length; i++) {
+    if (puedeColocar(tablero, forma, i)) return true;
+  }
+  return false;
 }
 
 /** Vista previa para pintar antes de soltar. No cambia nada. */
@@ -98,6 +114,7 @@ export function jugar(estado, indicePieza, celda) {
   if (lineas.cantidad > 0) {
     siguiente.tablero = limpiar(siguiente.tablero, lineas.celdas);
     siguiente.combo = estado.combo + 1;
+    siguiente.graciaUsada = 0;
     siguiente.mejorCombo = Math.max(estado.mejorCombo, siguiente.combo);
     const multiplicador = multiplicadorCombo(siguiente.combo);
     const base = puntosPorLineas(lineas.cantidad);
@@ -114,10 +131,20 @@ export function jugar(estado, indicePieza, celda) {
       puntos: Math.round(base * multiplicador),
     });
   } else {
-    // Una jugada que no limpia corta la racha. Eso es lo que hace que encadenar
-    // sea una decision y no algo que pasa solo.
-    if (estado.combo > 0) sucesos.push({ tipo: 'combo-cortado', era: estado.combo });
-    siguiente.combo = 0;
+    // El combo no se corta a la primera: aguanta GRACIA_COMBO jugadas sin
+    // limpiar. Cortarlo de una castigaba justo lo que el juego pide — acomodar
+    // piezas para preparar una jugada grande —, y volvia el combo cuestion de
+    // suerte en vez de estrategia.
+    const gastadas = (estado.graciaUsada ?? 0) + 1;
+    if (estado.combo > 0 && gastadas > GRACIA_COMBO) {
+      sucesos.push({ tipo: 'combo-cortado', era: estado.combo });
+      siguiente.combo = 0;
+      siguiente.graciaUsada = 0;
+    } else if (estado.combo > 0) {
+      siguiente.graciaUsada = gastadas;
+      sucesos.push({ tipo: 'combo-en-riesgo', combo: estado.combo,
+                     quedan: GRACIA_COMBO - gastadas + 1 });
+    }
     siguiente.monedas += monedasPorLineas(0);
   }
 
@@ -282,7 +309,8 @@ export function comprar(estado, articulo) {
   }
   const siguiente = { ...estado, monedas: estado.monedas - precio };
   if (articulo === 'revolver') {
-    siguiente.piezas = repartir(cuantasPiezas(estado), estado.azar, catalogo(estado));
+    siguiente.piezas = repartirJugable(estado.tablero, puedeColocarEnAlgunLado,
+                                       cuantasPiezas(estado), estado.azar, catalogo(estado));
     siguiente.terminada = !hayMovimiento(siguiente.tablero, formasDisponibles(siguiente.piezas));
   } else {
     siguiente.poderes = { ...estado.poderes, [articulo]: estado.poderes[articulo] + 1 };

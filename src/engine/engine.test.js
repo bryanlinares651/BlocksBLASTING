@@ -3,8 +3,8 @@ import {
   crearTablero, puedeColocar, colocar, lineasCompletas, limpiar, hayMovimiento,
   simular, celdasDeFila, celdasDeColumna, indice, BLOQUEADA, LADO,
 } from './board.js';
-import { FORMAS, repartir, crearPieza, GRANDES } from './pieces.js';
-import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria, multiplicadorCombo, BONUS_TABLERO_LIMPIO } from './scoring.js';
+import { FORMAS, repartir, repartirJugable, crearPieza, GRANDES } from './pieces.js';
+import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria, multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO } from './scoring.js';
 import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, buscarConsejo } from './game.js';
 
 // Azar fijo para que los tests no dependan de la suerte.
@@ -232,14 +232,23 @@ describe('partida', () => {
     const sinSalida = {
       ...p,
       tablero,
+      // Los cuadros quedan SIN usar a proposito. Si estuvieran gastados, al
+      // colocar el punto se dispararia un reparto nuevo, y el reparto justo
+      // entregaria algo que entra: el juego seguiria. Aca el final es
+      // legitimo — te quedan piezas en mano y ninguna cabe.
       piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
-               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: true },
-               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: true }],
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false }],
     };
     const { estado, sucesos } = jugar(sinSalida, 0, indice(0, 0));
     expect(sucesos.some((s) => s.tipo === 'lineas-limpiadas')).toBe(false);
     expect(estado.terminada).toBe(true);
     expect(sucesos.some((s) => s.tipo === 'fin-del-juego')).toBe(true);
+    // Termina con piezas EN MANO que no entran, no por un reparto nuevo malo:
+    // esa distincion es toda la diferencia entre perder jugando y perder por
+    // mala suerte del reparto.
+    expect(estado.piezas.every((p) => p.usada || !hayMovimiento(estado.tablero, [p.forma])))
+      .toBe(true);
   });
 
   it('guarda el mejor puntaje', () => {
@@ -363,11 +372,17 @@ describe('combos', () => {
     expect(dos.sucesos.find((s) => s.tipo === 'lineas-limpiadas').multiplicador).toBe(1.5);
   });
 
-  it('una jugada que no limpia corta la racha', () => {
-    const p = { ...nuevaPartida({ azar: azarFijo }), combo: 4 };
-    const { estado, sucesos } = jugar(p, 0, 0);
-    expect(estado.combo).toBe(0);
-    expect(sucesos.find((s) => s.tipo === 'combo-cortado').era).toBe(4);
+  it('una jugada sin limpiar gasta gracia; pasada la gracia, corta', () => {
+    // Antes se cortaba a la primera. Bryan pidio que aguantara, porque acomodar
+    // una pieza para preparar la jugada grande es justo lo que el juego pide.
+    const p = { ...nuevaPartida({ azar: azarFijo }), combo: 4, proximoJefeEn: 999999 };
+    const primera = jugar(p, 0, 0);
+    expect(primera.estado.combo).toBe(4);
+
+    const agotada = { ...p, graciaUsada: GRACIA_COMBO };
+    const ultima = jugar(agotada, 0, 0);
+    expect(ultima.estado.combo).toBe(0);
+    expect(ultima.sucesos.find((s) => s.tipo === 'combo-cortado').era).toBe(4);
   });
 
   it('guarda el mejor combo de la partida', () => {
@@ -499,5 +514,120 @@ describe('catalogo de formas', () => {
     for (const [nombre, forma] of Object.entries(FORMAS)) {
       expect(hayMovimiento(crearTablero(), [forma]), `${nombre} no entra`).toBe(true);
     }
+  });
+});
+
+describe('reparto justo', () => {
+  // Bryan perdio una partida asi: coloco sus tres piezas, le repartieron tres
+  // nuevas al azar, ninguna entraba y se acabo el juego sin que hubiera jugado
+  // mal. El reparto tiene que mirar el tablero.
+  const cabe = (tablero, forma) => {
+    for (let i = 0; i < tablero.length; i++) if (puedeColocar(tablero, forma, i)) return true;
+    return false;
+  };
+
+  it('con huecos de una sola celda, reparte algo que entra', () => {
+    // Tablero con solo huecos sueltos: unicamente el 'punto' cabe. Un reparto
+    // al azar casi nunca lo incluye tres veces seguidas.
+    const t = Array(64).fill('#f00');
+    for (let i = 0; i < LADO; i++) t[indice(i, i)] = null;
+    const azarQueNuncaDaElPunto = () => 0.5;   // cae siempre en la misma forma grande
+    const piezas = repartirJugable(t, cabe, 3, azarQueNuncaDaElPunto);
+    expect(piezas.some((p) => cabe(t, p.forma))).toBe(true);
+  });
+
+  it('reparte jugable en cien tableros distintos', () => {
+    // Prueba de fuerza bruta: si el reparto justo tiene un agujero, aparece aca.
+    let fallos = 0;
+    for (let semilla = 0; semilla < 100; semilla++) {
+      let x = semilla + 1;
+      const azar = () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; };
+      const t = Array(64).fill('#f00');
+      // dejar entre 1 y 8 huecos sueltos, en diagonal
+      const huecos = 1 + (semilla % 8);
+      for (let i = 0; i < huecos; i++) t[indice(i, i)] = null;
+      const piezas = repartirJugable(t, cabe, 3, azar);
+      if (!piezas.some((p) => cabe(t, p.forma))) fallos++;
+    }
+    expect(fallos).toBe(0);
+  });
+
+  it('con el tablero realmente lleno, no se cuelga', () => {
+    // Aca perder SI es legitimo: no hay hueco para nada.
+    const lleno = Array(64).fill('#f00');
+    expect(() => repartirJugable(lleno, cabe, 3, () => 0.5)).not.toThrow();
+    expect(repartirJugable(lleno, cabe, 3, () => 0.5)).toHaveLength(3);
+  });
+
+  it('jugando una partida entera, ningun reparto nuevo llega muerto', () => {
+    // La regla es sobre el REPARTO: cada vez que el juego entrega piezas
+    // nuevas, al menos una tiene que entrar. Que las piezas que YA tenias en
+    // mano dejen de caber si es parte del juego — ahi perdes por como jugaste.
+    let estado = nuevaPartida({ azar: () => 0.37 });
+    let repartosMuertos = 0;
+    let repartos = 0;
+    for (let turno = 0; turno < 120 && !estado.terminada; turno++) {
+      const libre = estado.piezas.findIndex((p) => !p.usada);
+      if (libre < 0) break;
+      let jugo = false;
+      for (let celda = 0; celda < 64 && !jugo; celda++) {
+        const r = jugar(estado, libre, celda);
+        if (r.sucesos.some((s) => s.tipo === 'colocada')) {
+          if (r.sucesos.some((s) => s.tipo === 'piezas-nuevas')) {
+            repartos++;
+            const alguna = r.estado.piezas.some((p) => cabe(r.estado.tablero, p.forma));
+            if (!alguna && Object.values(FORMAS).some((f) => cabe(r.estado.tablero, f))) {
+              repartosMuertos++;
+            }
+          }
+          estado = r.estado;
+          jugo = true;
+        }
+      }
+      if (!jugo) break;
+    }
+    expect(repartos).toBeGreaterThan(3);      // que la partida realmente repartio
+    expect(repartosMuertos).toBe(0);
+  });
+});
+
+describe('combo con gracia', () => {
+  const conCombo = (combo, gracia = 0) => ({
+    ...nuevaPartida({ azar: azarFijo }), combo, graciaUsada: gracia, proximoJefeEn: 999999,
+  });
+
+  it('una jugada sin limpiar NO corta la racha', () => {
+    const { estado, sucesos } = jugar(conCombo(3), 0, 0);
+    expect(estado.combo).toBe(3);
+    expect(sucesos.some((s) => s.tipo === 'combo-cortado')).toBe(false);
+    expect(sucesos.find((s) => s.tipo === 'combo-en-riesgo').quedan).toBe(GRACIA_COMBO);
+  });
+
+  it('se corta recien al pasarse de la gracia', () => {
+    let estado = conCombo(3);
+    for (let i = 0; i < GRACIA_COMBO; i++) {
+      estado = jugar(estado, estado.piezas.findIndex((p) => !p.usada), indice(i, 0)).estado;
+      expect(estado.combo).toBe(3);
+    }
+    const ultima = jugar(estado, estado.piezas.findIndex((p) => !p.usada), indice(6, 0));
+    expect(ultima.estado.combo).toBe(0);
+    expect(ultima.sucesos.some((s) => s.tipo === 'combo-cortado')).toBe(true);
+  });
+
+  it('limpiar devuelve la gracia entera', () => {
+    const t = crearTablero();
+    for (let c = 0; c < 7; c++) t[indice(0, c)] = '#f00';
+    const gastada = { ...conCombo(2, GRACIA_COMBO), tablero: t,
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true }] };
+    const { estado } = jugar(gastada, 0, indice(0, 7));
+    expect(estado.combo).toBe(3);
+    expect(estado.graciaUsada).toBe(0);
+  });
+
+  it('sin combo activo no avisa de riesgo', () => {
+    const { sucesos } = jugar(conCombo(0), 0, 0);
+    expect(sucesos.some((s) => s.tipo === 'combo-en-riesgo')).toBe(false);
   });
 });

@@ -582,6 +582,19 @@ async function iniciar() {
     });
   });
 
+  // Cambiar de estilo a mano. El cambio "de verdad" se gana limpiando el
+  // tablero, pero tener los tres encerrados detras de la jugada mas dificil
+  // significaba que Bryan no habia visto NINGUNO despues de un dia jugando.
+  $('btn-tema').addEventListener('click', () => {
+    sonido.despertar();
+    temaActual = siguienteTema(temaActual.id);
+    aplicarCss(temaActual);
+    escenario.aplicarTema(temaActual);
+    pintarBandeja();
+    sonido.subirNivel();
+    aviso(`${temaActual.nombre} · ${temaActual.lema}`);
+  });
+
   $('btn-sonido').addEventListener('click', () => {
     sonido.despertar();
     const mudo = sonido.alternarSilencio();
