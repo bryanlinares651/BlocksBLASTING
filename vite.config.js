@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 // base: '/nova-blocks/' porque en GitHub Pages el sitio cuelga del nombre del
 // repositorio, no de la raiz del dominio. Sin esto, todos los recursos dan 404
 // una vez publicado aunque en local funcione perfecto.
-const base = process.env.NOVA_BASE ?? '/nova-blocks/';
+const base = process.env.NOVA_BASE ?? '/BlocksBLASTING/';
 
 export default defineConfig({
   base,
