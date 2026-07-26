@@ -9,6 +9,7 @@ import {
 import { repartir, formasDisponibles, NOMBRES, GRANDES } from './pieces.js';
 import {
   puntosPorColocar, puntosPorLineas, monedasPorLineas, aplicarXp, xpNecesaria,
+  multiplicadorCombo, BONUS_TABLERO_LIMPIO,
 } from './scoring.js';
 import { tocaJefe, elegirJefe, activar, avanzar, PRIMER_UMBRAL } from '../bosses/index.js';
 
@@ -22,10 +23,13 @@ export function nuevaPartida({ azar = Math.random, monedas = 120, mejor = 0 } = 
     mejor,
     nivel: 1,
     xp: 0,
-    poderes: { bomba: 0, rayo: 0 },
+    poderes: { bomba: 0, rayo: 0, lampara: 0 },
     jefe: null,          // { id, nombre, turnosRestantes, ... }
     jefesVencidos: [],
     proximoJefeEn: PRIMER_UMBRAL,
+    combo: 0,            // jugadas seguidas que limpiaron algo
+    mejorCombo: 0,
+    tablerosLimpiados: 0,
     turno: 0,
     terminada: false,
     azar,
@@ -66,6 +70,16 @@ export function jugar(estado, indicePieza, celda) {
   const pieza = estado.piezas[indicePieza];
   if (!pieza) return { estado, sucesos: [{ tipo: 'rechazado', razon: 'no-existe' }] };
   if (pieza.usada) return { estado, sucesos: [{ tipo: 'rechazado', razon: 'ya-usada' }] };
+
+  // El Tacaño te deja ver las tres pero usar solo la primera sin gastar. Lo que
+  // duele no es tener menos piezas, es no poder elegir cual.
+  if (estado.jefe?.soloLaPrimera) {
+    const primeraLibre = estado.piezas.findIndex((p) => !p.usada);
+    if (indicePieza !== primeraLibre) {
+      return { estado, sucesos: [{ tipo: 'rechazado', razon: 'jefe-la-bloquea' }] };
+    }
+  }
+
   if (!puedeColocar(estado.tablero, pieza.forma, celda)) {
     return { estado, sucesos: [{ tipo: 'rechazado', razon: 'no-cabe' }] };
   }
@@ -80,9 +94,14 @@ export function jugar(estado, indicePieza, celda) {
   // Limpiar lo que se haya completado
   const lineas = lineasCompletas(siguiente.tablero);
   let ganados = puntosPorColocar(pieza.forma.length);
+
   if (lineas.cantidad > 0) {
     siguiente.tablero = limpiar(siguiente.tablero, lineas.celdas);
-    ganados += puntosPorLineas(lineas.cantidad);
+    siguiente.combo = estado.combo + 1;
+    siguiente.mejorCombo = Math.max(estado.mejorCombo, siguiente.combo);
+    const multiplicador = multiplicadorCombo(siguiente.combo);
+    const base = puntosPorLineas(lineas.cantidad);
+    ganados += Math.round(base * multiplicador);
     siguiente.monedas += monedasPorLineas(lineas.cantidad);
     sucesos.push({
       tipo: 'lineas-limpiadas',
@@ -90,9 +109,28 @@ export function jugar(estado, indicePieza, celda) {
       filas: lineas.filas,
       columnas: lineas.columnas,
       celdas: lineas.celdas,
+      combo: siguiente.combo,
+      multiplicador,
+      puntos: Math.round(base * multiplicador),
     });
   } else {
+    // Una jugada que no limpia corta la racha. Eso es lo que hace que encadenar
+    // sea una decision y no algo que pasa solo.
+    if (estado.combo > 0) sucesos.push({ tipo: 'combo-cortado', era: estado.combo });
+    siguiente.combo = 0;
     siguiente.monedas += monedasPorLineas(0);
+  }
+
+  // Dejar el tablero completamente vacio: la jugada mas dificil del juego.
+  if (lineas.cantidad > 0 && siguiente.tablero.every((c) => c === null)) {
+    ganados += BONUS_TABLERO_LIMPIO;
+    siguiente.monedas += 100;
+    siguiente.tablerosLimpiados = estado.tablerosLimpiados + 1;
+    sucesos.push({
+      tipo: 'tablero-limpio',
+      bonus: BONUS_TABLERO_LIMPIO,
+      vez: siguiente.tablerosLimpiados,
+    });
   }
 
   siguiente.puntaje = estado.puntaje + ganados;
@@ -170,8 +208,73 @@ export function usarPoder(estado, tipo, celda) {
   };
 }
 
+/**
+ * La lampara: busca la mejor jugada posible y te la señala.
+ *
+ * Prueba todas las combinaciones de pieza y posicion, y se queda con la que mas
+ * lineas limpia; a igualdad de lineas, con la que deja menos huecos sueltos
+ * (una celda vacia rodeada de ocupadas es la que despues no sirve para nada).
+ *
+ * No consume el poder si no encuentra nada util: pagar por "no hay jugada
+ * buena" seria una estafa.
+ */
+export function buscarConsejo(estado) {
+  let mejor = null;
+  estado.piezas.forEach((pieza, indicePieza) => {
+    if (pieza.usada) return;
+    if (estado.jefe?.soloLaPrimera) {
+      const primera = estado.piezas.findIndex((p) => !p.usada);
+      if (indicePieza !== primera) return;
+    }
+    for (let celda = 0; celda < estado.tablero.length; celda++) {
+      if (!puedeColocar(estado.tablero, pieza.forma, celda)) continue;
+      const tras = colocar(estado.tablero, pieza.forma, celda, pieza.color);
+      const lineas = lineasCompletas(tras);
+      const huecos = contarHuecosSueltos(limpiar(tras, lineas.celdas));
+      const puntaje = lineas.cantidad * 1000 - huecos;
+      if (!mejor || puntaje > mejor.puntaje) {
+        mejor = { indicePieza, celda, lineas: lineas.cantidad, huecos, puntaje };
+      }
+    }
+  });
+  return mejor;
+}
+
+/** Celdas vacias sin ninguna vecina vacia: son las que despues no sirven. */
+function contarHuecosSueltos(tablero) {
+  let sueltos = 0;
+  for (let i = 0; i < tablero.length; i++) {
+    if (tablero[i] !== null) continue;
+    const fila = Math.floor(i / 8);
+    const col = i % 8;
+    const vecinas = [
+      fila > 0 ? i - 8 : null,
+      fila < 7 ? i + 8 : null,
+      col > 0 ? i - 1 : null,
+      col < 7 ? i + 1 : null,
+    ].filter((v) => v !== null);
+    if (vecinas.every((v) => tablero[v] !== null)) sueltos++;
+  }
+  return sueltos;
+}
+
+export function usarLampara(estado) {
+  if (!estado.poderes.lampara) {
+    return { estado, sucesos: [{ tipo: 'rechazado', razon: 'sin-poder' }] };
+  }
+  const consejo = buscarConsejo(estado);
+  if (!consejo) {
+    // No se cobra: no hay nada que aconsejar.
+    return { estado, sucesos: [{ tipo: 'rechazado', razon: 'sin-consejo' }] };
+  }
+  return {
+    estado: { ...estado, poderes: { ...estado.poderes, lampara: estado.poderes.lampara - 1 } },
+    sucesos: [{ tipo: 'consejo', ...consejo }],
+  };
+}
+
 export function comprar(estado, articulo) {
-  const precios = { bomba: 40, rayo: 60, revolver: 80 };
+  const precios = { bomba: 40, rayo: 60, revolver: 80, lampara: 50 };
   const precio = precios[articulo];
   if (precio === undefined) return { estado, sucesos: [{ tipo: 'rechazado', razon: 'no-existe' }] };
   if (estado.monedas < precio) {

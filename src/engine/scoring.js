@@ -18,6 +18,25 @@ export function monedasPorLineas(lineas) {
   return lineas <= 0 ? 1 : lineas * 8;
 }
 
+/**
+ * Combo: jugadas SEGUIDAS que limpiaron algo. Una jugada que no limpia lo corta.
+ *
+ * El multiplicador crece de a poco (x1, x1.5, x2, x2.5...) y se topa en x5.
+ * Sin tope, una racha larga vuelve irrelevante todo lo demas del juego; sin
+ * crecimiento, encadenar no se siente distinto a limpiar suelto.
+ */
+export function multiplicadorCombo(combo) {
+  if (combo <= 1) return 1;
+  return Math.min(5, 1 + (combo - 1) * 0.5);
+}
+
+/**
+ * Bonus por dejar el tablero completamente vacio. Es la jugada mas dificil del
+ * juego y tiene que pagar como tal: vale mas que cuatro lineas de una vez
+ * (1120) para que valga la pena buscarla.
+ */
+export const BONUS_TABLERO_LIMPIO = 2000;
+
 export function xpNecesaria(nivel) {
   return nivel * 500;
 }

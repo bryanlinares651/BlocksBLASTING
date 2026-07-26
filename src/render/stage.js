@@ -354,4 +354,13 @@ export class Escenario {
     const escala = r.width / this.app.screen.width;
     return { x: r.left + x * escala, y: r.top + y * escala };
   }
+
+  /**
+   * Lado de una celda medido en pixeles de PANTALLA, no del lienzo interno.
+   * La pieza que sigue el dedo vive en HTML, y ahi solo existen los de pantalla:
+   * usar los del lienzo la dibuja de otro tamaño que el tablero.
+   */
+  ladoCeldaEnPantalla() {
+    return this.app.canvas.getBoundingClientRect().width / LADO;
+  }
 }

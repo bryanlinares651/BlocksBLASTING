@@ -490,6 +490,36 @@ button {
   to   { transform: none; opacity: 1; }
 }
 
+/* --- La pieza que sigue el dedo --- */
+
+.pieza-flotante {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 35;
+  pointer-events: none;
+  opacity: 0;
+  /* `will-change` avisa a la placa de video que esto se mueve: sin esto, el
+     navegador repinta la capa en cada cuadro y el arrastre se siente pegajoso. */
+  will-change: transform, opacity;
+  transition: opacity 160ms var(--salida-firme);
+}
+
+.pieza-flotante[data-viva="1"] { opacity: 0.95; }
+
+.pieza-flotante i {
+  position: absolute;
+  width: var(--lado);
+  height: var(--lado);
+  border-radius: calc(var(--lado) * 0.22);
+  background: var(--c);
+  box-shadow:
+    inset 0 calc(var(--lado) * 0.09) 0 oklch(1 0 0 / 0.30),
+    inset 0 calc(var(--lado) * -0.07) 0 oklch(0 0 0 / 0.18),
+    0 calc(var(--lado) * 0.12) calc(var(--lado) * 0.3) oklch(0.08 0.03 265 / 0.55);
+  transform: scale(0.94);
+}
+
 /* --- Puntos flotantes y avisos --- */
 
 .flotantes { position: fixed; inset: 0; pointer-events: none; z-index: 30; }

@@ -4,8 +4,8 @@ import {
   simular, celdasDeFila, celdasDeColumna, indice, BLOQUEADA, LADO,
 } from './board.js';
 import { FORMAS, repartir, crearPieza, GRANDES } from './pieces.js';
-import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria } from './scoring.js';
-import { nuevaPartida, jugar, usarPoder, comprar, previsualizar } from './game.js';
+import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria, multiplicadorCombo, BONUS_TABLERO_LIMPIO } from './scoring.js';
+import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, buscarConsejo } from './game.js';
 
 // Azar fijo para que los tests no dependan de la suerte.
 const azarFijo = () => 0;
@@ -174,6 +174,10 @@ describe('partida', () => {
     const listo = {
       ...p,
       tablero,
+      // Umbral fuera de alcance a proposito: dejar el tablero limpio paga 2000
+      // de bonus, eso cruzaria el umbral del jefe, y El Bloqueador sella celdas
+      // — el tablero ya no quedaria vacio y este test mediria otra cosa.
+      proximoJefeEn: 999999,
       piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
                { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
                { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false }],
@@ -183,6 +187,21 @@ describe('partida', () => {
     expect(limpiadas.cantidad).toBe(1);
     expect(estado.tablero.filter(Boolean)).toHaveLength(0);
     expect(estado.monedas).toBeGreaterThan(p.monedas);
+  });
+
+  it('el bonus de tablero limpio puede invocar al jefe en la misma jugada', () => {
+    // No es un bug: limpiar todo paga 2000 y eso cruza el umbral. Queda
+    // documentado porque es un momento fuerte del juego, no un accidente.
+    const p = nuevaPartida({ azar: azarFijo });
+    const tablero = crearTablero();
+    for (let c = 0; c < 7; c++) tablero[indice(0, c)] = '#f00';
+    const listo = { ...p, tablero, puntaje: 0, proximoJefeEn: 2000,
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true }] };
+    const { sucesos } = jugar(listo, 0, indice(0, 7));
+    expect(sucesos.some((s) => s.tipo === 'tablero-limpio')).toBe(true);
+    expect(sucesos.some((s) => s.tipo === 'jefe-entra')).toBe(true);
   });
 
   it('reparte piezas nuevas al gastar las tres', () => {
@@ -312,5 +331,173 @@ describe('piezas', () => {
     expect(p.usada).toBe(false);
     p.forma[0][0] = 99;
     expect(crearPieza(azarFijo).forma[0][0]).not.toBe(99); // no comparte la forma del catalogo
+  });
+});
+
+describe('combos', () => {
+  it('el multiplicador crece pero tiene techo', () => {
+    expect(multiplicadorCombo(0)).toBe(1);
+    expect(multiplicadorCombo(1)).toBe(1);
+    expect(multiplicadorCombo(2)).toBe(1.5);
+    expect(multiplicadorCombo(3)).toBe(2);
+    // Sin techo, una racha larga vuelve irrelevante todo lo demas
+    expect(multiplicadorCombo(50)).toBe(5);
+  });
+
+  it('limpiar dos jugadas seguidas sube el combo', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const conFila = (fila, pieza) => {
+      const t = crearTablero();
+      for (let c = 0; c < 7; c++) t[indice(fila, c)] = '#f00';
+      return { ...p, tablero: t, combo: 0,
+        piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+                 { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+                 { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false }] };
+    };
+    const uno = jugar(conFila(0), 0, indice(0, 7));
+    expect(uno.estado.combo).toBe(1);
+    // Segunda limpieza consecutiva partiendo del combo que quedo
+    const dosBase = { ...conFila(2), combo: uno.estado.combo };
+    const dos = jugar(dosBase, 0, indice(2, 7));
+    expect(dos.estado.combo).toBe(2);
+    expect(dos.sucesos.find((s) => s.tipo === 'lineas-limpiadas').multiplicador).toBe(1.5);
+  });
+
+  it('una jugada que no limpia corta la racha', () => {
+    const p = { ...nuevaPartida({ azar: azarFijo }), combo: 4 };
+    const { estado, sucesos } = jugar(p, 0, 0);
+    expect(estado.combo).toBe(0);
+    expect(sucesos.find((s) => s.tipo === 'combo-cortado').era).toBe(4);
+  });
+
+  it('guarda el mejor combo de la partida', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const t = crearTablero();
+    for (let c = 0; c < 7; c++) t[indice(0, c)] = '#f00';
+    const listo = { ...p, tablero: t, combo: 6,
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true }] };
+    expect(jugar(listo, 0, indice(0, 7)).estado.mejorCombo).toBe(7);
+  });
+});
+
+describe('tablero limpio', () => {
+  it('avisa y paga bonus al dejarlo vacio', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const t = crearTablero();
+    for (let c = 0; c < 7; c++) t[indice(0, c)] = '#f00';
+    const listo = { ...p, tablero: t, puntaje: 0,
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true }] };
+    const { estado, sucesos } = jugar(listo, 0, indice(0, 7));
+    const limpio = sucesos.find((s) => s.tipo === 'tablero-limpio');
+    expect(limpio).toBeTruthy();
+    expect(limpio.bonus).toBe(BONUS_TABLERO_LIMPIO);
+    expect(limpio.vez).toBe(1);
+    expect(estado.puntaje).toBeGreaterThan(BONUS_TABLERO_LIMPIO);
+    expect(estado.tablerosLimpiados).toBe(1);
+  });
+
+  it('NO lo avisa si quedan bloques', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const t = crearTablero();
+    for (let c = 0; c < 7; c++) t[indice(0, c)] = '#f00';
+    t[indice(5, 5)] = '#f00';  // un bloque suelto que sobrevive
+    const listo = { ...p, tablero: t,
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true },
+               { nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: true }] };
+    const { sucesos } = jugar(listo, 0, indice(0, 7));
+    expect(sucesos.some((s) => s.tipo === 'tablero-limpio')).toBe(false);
+  });
+
+  it('el bonus vale mas que la mejor jugada normal', () => {
+    // Si no, nadie va a buscar el tablero limpio
+    expect(BONUS_TABLERO_LIMPIO).toBeGreaterThan(puntosPorLineas(4));
+  });
+});
+
+describe('la lampara', () => {
+  it('encuentra la jugada que limpia una linea', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const t = crearTablero();
+    for (let c = 0; c < 7; c++) t[indice(0, c)] = '#f00';
+    const listo = { ...p, tablero: t, poderes: { bomba: 0, rayo: 0, lampara: 1 },
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false }] };
+    const { estado, sucesos } = usarLampara(listo);
+    const consejo = sucesos.find((s) => s.tipo === 'consejo');
+    expect(consejo.lineas).toBe(1);
+    expect(consejo.celda).toBe(indice(0, 7));  // el unico hueco de la fila
+    expect(consejo.indicePieza).toBe(0);
+    expect(estado.poderes.lampara).toBe(0);
+  });
+
+  it('sin lineas posibles, elige la que deja menos huecos sueltos', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const listo = { ...p, poderes: { bomba: 0, rayo: 0, lampara: 1 },
+      piezas: [{ nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: true },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: true }] };
+    const consejo = usarLampara(listo).sucesos.find((s) => s.tipo === 'consejo');
+    expect(consejo).toBeTruthy();
+    expect(consejo.lineas).toBe(0);
+    expect(consejo.huecos).toBe(0);   // en tablero vacio no deberia dejar ninguno
+  });
+
+  it('NO cobra el poder si no hay ninguna jugada posible', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const sinSalida = { ...p, tablero: Array(64).fill('#f00'),
+      poderes: { bomba: 0, rayo: 0, lampara: 1 } };
+    const { estado, sucesos } = usarLampara(sinSalida);
+    expect(sucesos[0]).toMatchObject({ tipo: 'rechazado', razon: 'sin-consejo' });
+    expect(estado.poderes.lampara).toBe(1);   // sigue intacto
+  });
+
+  it('respeta al Tacaño: solo aconseja la pieza permitida', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const conJefe = { ...p, poderes: { bomba: 0, rayo: 0, lampara: 1 },
+      jefe: { id: 'tacano', soloLaPrimera: true, turnosRestantes: 5 },
+      piezas: [{ nombre: 'punto', forma: FORMAS.punto, color: '#0ff', usada: false },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false },
+               { nombre: 'cuadro', forma: FORMAS.cuadro, color: '#0ff', usada: false }] };
+    const consejo = usarLampara(conJefe).sucesos.find((s) => s.tipo === 'consejo');
+    expect(consejo.indicePieza).toBe(0);
+  });
+
+  it('se puede comprar en la tienda', () => {
+    const p = nuevaPartida({ azar: azarFijo, monedas: 100 });
+    const { estado } = comprar(p, 'lampara');
+    expect(estado.monedas).toBe(50);
+    expect(estado.poderes.lampara).toBe(1);
+  });
+});
+
+describe('catalogo de formas', () => {
+  it('toda forma tiene al menos una celda y ninguna se repite', () => {
+    for (const [nombre, forma] of Object.entries(FORMAS)) {
+      expect(forma.length, nombre).toBeGreaterThan(0);
+      const claves = forma.map(([x, y]) => `${x},${y}`);
+      expect(new Set(claves).size, `${nombre} tiene celdas repetidas`).toBe(forma.length);
+    }
+  });
+
+  it('ninguna forma es mas grande que el tablero', () => {
+    for (const [nombre, forma] of Object.entries(FORMAS)) {
+      const ancho = Math.max(...forma.map((p) => p[0])) + 1;
+      const alto = Math.max(...forma.map((p) => p[1])) + 1;
+      expect(ancho, `${nombre} es muy ancha`).toBeLessThanOrEqual(LADO);
+      expect(alto, `${nombre} es muy alta`).toBeLessThanOrEqual(LADO);
+    }
+  });
+
+  it('toda forma entra en un tablero vacio', () => {
+    // Una forma que no entra nunca seria una partida perdida de arranque
+    for (const [nombre, forma] of Object.entries(FORMAS)) {
+      expect(hayMovimiento(crearTablero(), [forma]), `${nombre} no entra`).toBe(true);
+    }
   });
 });

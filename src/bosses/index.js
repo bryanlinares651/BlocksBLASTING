@@ -68,13 +68,23 @@ export const EL_BASURERO = {
   },
 };
 
+/**
+ * EL TACAÑO — version corregida.
+ *
+ * La primera version daba 2 piezas en vez de 3, y Bryan detecto que eso lo
+ * BENEFICIABA: con 3 piezas estas obligado a colocar las tres, con 2 tenes mas
+ * libertad. Menos piezas = menos restriccion = mas facil.
+ *
+ * Lo que si duele es quitarte la ELECCION, que es el recurso de verdad del
+ * jugador: ahora ves las tres pero solo podes usar la de la izquierda.
+ */
 export const EL_TACANO = {
   id: 'tacano',
   nombre: 'EL TACAÑO',
-  descripcion: 'Te da 2 piezas por turno en vez de 3.',
+  descripcion: 'Solo podés usar la primera pieza.',
   color: '#ffd166',
-  turnos: 12,
-  piezasPorTurno: 2,
+  turnos: 10,
+  soloLaPrimera: true,
 };
 
 export const EL_GIGANTE = {
@@ -86,7 +96,81 @@ export const EL_GIGANTE = {
   soloGrandes: true,
 };
 
-export const JEFES = [EL_BLOQUEADOR, EL_BASURERO, EL_TACANO, EL_GIGANTE];
+/** Encoge el area jugable: sella el borde y te deja un 7x7. */
+export const EL_ENCOGEDOR = {
+  id: 'encogedor',
+  nombre: 'EL ENCOGEDOR',
+  descripcion: 'Te achica el tablero a 7×7.',
+  color: '#39d0d8',
+  turnos: 8,
+
+  alEmpezar(estado) {
+    // Solo se sellan las celdas VACIAS del borde: sellar una ocupada borraria
+    // un bloque del jugador sin avisar, y eso se siente tramposo.
+    const tablero = estado.tablero.slice();
+    const borde = [];
+    for (let i = 0; i < LADO; i++) {
+      borde.push(i * LADO + (LADO - 1));        // ultima columna
+      borde.push((LADO - 1) * LADO + i);        // ultima fila
+    }
+    for (const c of new Set(borde)) {
+      if (tablero[c] === null) tablero[c] = BLOQUEADA;
+    }
+    return { tablero };
+  },
+
+  alTerminar(estado) {
+    return { tablero: estado.tablero.map((c) => (c === BLOQUEADA ? null : c)) };
+  },
+};
+
+/**
+ * LA CUOTA — el unico jefe con una meta que se puede fallar.
+ *
+ * Te pide una cantidad de puntos antes de que se le acaben los turnos. Si
+ * llegas, se va y te paga. Si no, te deja el tablero sembrado de basura. No
+ * mata la partida: hacerte perder por un reloj seria frustrante en un juego que
+ * se juega en ratos cortos.
+ */
+export const LA_CUOTA = {
+  id: 'cuota',
+  nombre: 'LA CUOTA',
+  descripcion: 'Hacé 1200 puntos antes de que se acaben sus turnos.',
+  color: '#ff8c42',
+  turnos: 9,
+  meta: 1200,
+
+  alEmpezar(estado) {
+    return { extra: { objetivo: estado.puntaje + LA_CUOTA.meta, cumplida: false } };
+  },
+
+  enCadaTurno(estado) {
+    if (estado.jefe.cumplida) return {};
+    if (estado.puntaje >= estado.jefe.objetivo) {
+      return { aviso: { tipo: 'cuota-cumplida' }, marcarCumplida: true };
+    }
+    return {};
+  },
+
+  alTerminar(estado, azar) {
+    if (estado.jefe.cumplida) return { aviso: { tipo: 'cuota-premio' } };
+    // No llegaste: cae basura. Molesta, no mata.
+    const libres = celdasVacias(estado.tablero);
+    const tablero = estado.tablero.slice();
+    const cuantos = Math.min(6, libres.length);
+    const restantes = libres.slice();
+    for (let i = 0; i < cuantos; i++) {
+      const idx = Math.floor(azar() * restantes.length);
+      tablero[restantes[idx]] = COLOR_BASURA;
+      restantes.splice(idx, 1);
+    }
+    return { tablero, aviso: { tipo: 'cuota-fallada', bloques: cuantos } };
+  },
+};
+
+export const JEFES = [
+  EL_BLOQUEADOR, EL_BASURERO, EL_TACANO, EL_GIGANTE, EL_ENCOGEDOR, LA_CUOTA,
+];
 
 /** Primer jefe a los 2000 puntos. */
 export const PRIMER_UMBRAL = 2000;
@@ -121,21 +205,17 @@ export function activar(estado, jefe, azar) {
     if (r.tablero) tablero = r.tablero;
     if (r.extra) extra = r.extra;
   }
+  // Se copian TODAS las opciones del jefe, no una lista escrita a mano: cuando
+  // esa lista existia, agregar una regla nueva a un jefe compilaba sin error y
+  // la regla simplemente no hacia nada, porque nadie la copiaba al estado.
+  // Las funciones se dejan afuera: el estado tiene que poder serializarse.
+  const { alEmpezar, enCadaTurno, alTerminar, ...config } = jefe;
+
   return {
     estado: {
       ...estado,
       tablero,
-      jefe: {
-        id: jefe.id,
-        nombre: jefe.nombre,
-        descripcion: jefe.descripcion,
-        color: jefe.color,
-        turnos: jefe.turnos,
-        turnosRestantes: jefe.turnos,
-        piezasPorTurno: jefe.piezasPorTurno,
-        soloGrandes: jefe.soloGrandes,
-        ...extra,
-      },
+      jefe: { ...config, turnosRestantes: jefe.turnos, ...extra },
     },
     sucesos,
   };
@@ -152,6 +232,9 @@ export function avanzar(estado, azar) {
     const r = definicion.enCadaTurno(siguiente, azar);
     if (r.tablero) siguiente.tablero = r.tablero;
     if (r.aviso) sucesos.push(r.aviso);
+    // La Cuota se marca cumplida en el momento en que se alcanza, no al final:
+    // si no, cumplirla y volver a bajar del objetivo la daria por fallada.
+    if (r.marcarCumplida) siguiente.jefe = { ...siguiente.jefe, cumplida: true };
   }
 
   const restantes = siguiente.jefe.turnosRestantes - 1;
@@ -162,8 +245,9 @@ export function avanzar(estado, azar) {
 
   // Se acabo: revertir lo que haya dejado puesto
   if (definicion?.alTerminar) {
-    const r = definicion.alTerminar(siguiente);
+    const r = definicion.alTerminar(siguiente, azar);
     if (r.tablero) siguiente.tablero = r.tablero;
+    if (r.aviso) sucesos.push(r.aviso);
   }
   const vencidos = [...siguiente.jefesVencidos, siguiente.jefe.id];
   sucesos.push({ tipo: 'jefe-vencido', id: siguiente.jefe.id, nombre: siguiente.jefe.nombre });

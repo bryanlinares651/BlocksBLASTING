@@ -22,6 +22,21 @@ export const FORMAS = {
   cuatro_v: [[0, 0], [0, 1], [0, 2], [0, 3]],
   esquina: [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]],
   cruz: [[1, 0], [0, 1], [1, 1], [2, 1], [1, 2]],
+
+  // Las cuatro rotaciones de la ele y la ese: sin ellas, media pieza del
+  // catalogo era simetrica y el tablero se sentia siempre igual.
+  ele_der: [[1, 0], [1, 1], [0, 1]],
+  ele_inv: [[0, 0], [1, 0], [1, 1]],
+  ese: [[1, 0], [2, 0], [0, 1], [1, 1]],
+  te_abajo: [[1, 0], [0, 1], [1, 1], [2, 1]],
+  esquina_der: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]],
+  esquina_baja: [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]],
+
+  // Las grandes de verdad: aparecen poco pero cambian toda la partida.
+  cinco_h: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+  cinco_v: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
+  bloque_seis: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]],
+  cuadro_grande: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]],
 };
 
 export const NOMBRES = Object.keys(FORMAS);

@@ -4,6 +4,7 @@ import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, xpNecesaria } f
 import { LADO, coordenadas, indice, celdasDe, BLOQUEADA } from './engine/board.js';
 import { Escenario } from './render/stage.js';
 import { flotarPuntos } from './render/effects.js';
+import { PiezaFlotante } from './render/floating.js';
 import { PALETA, PALETA_CSS, COLORES_JEFE, intensidad } from './render/theme.js';
 import { Sonido } from './audio/sfx.js';
 
@@ -13,6 +14,7 @@ const reducido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const sonido = new Sonido();
 let escenario;
+let flotante;
 let estado;
 let apuntando = null;   // 'bomba' | 'rayo' cuando se esta eligiendo donde
 let arrastre = null;    // { pieza, celda } mientras el dedo esta abajo
@@ -330,10 +332,27 @@ function engancharPieza(el, i) {
     estado = { ...estado, seleccionada: i };
     arrastre = { pieza: i, celda: null };
     document.body.classList.add('arrastrando');
-    el.setPointerCapture?.(ev.pointerId);
+    // Capturar el puntero es una mejora, no un requisito: si falla (pasa con
+    // eventos sinteticos, y puede pasar si el puntero se solto antes de
+    // tiempo) no puede llevarse puesto el resto del arrastre.
+    try { el.setPointerCapture?.(ev.pointerId); } catch { /* sin captura, igual funciona */ }
+    levantarFlotante(i, ev.clientX, ev.clientY);
     pintarBandeja();
   });
 }
+
+/** Levanta la pieza que va a seguir el dedo, ya a la medida del tablero. */
+function levantarFlotante(indicePieza, x, y) {
+  const pieza = estado.piezas[indicePieza];
+  if (!pieza) return;
+  flotante.tomar(pieza, escenario.ladoCeldaEnPantalla(), cssDeNombre(pieza.color),
+                 x, y - escenario.ladoCeldaEnPantalla() * ALTURA_DEDO);
+}
+
+// Cuanto se levanta la pieza sobre el dedo mientras la arrastras, en bloques.
+// Tiene que coincidir con el LEVANTE del calculo de celda, o lo que ves y donde
+// cae no coinciden.
+const ALTURA_DEDO = 1;
 
 // Cuanto puede salirse el dedo del tablero sin que se corte el preview. Hacia
 // afuera es seguro: da holgura en los bordes sin crear zonas muertas adentro.
@@ -343,6 +362,12 @@ function moverArrastre(ev) {
   if (!arrastre) return;
   const pieza = estado.piezas[arrastre.pieza];
   if (!pieza) return;
+
+  // La pieza sigue el dedo SIEMPRE, aunque este fuera del tablero. Es lo que
+  // hace que el arrastre se sienta continuo en vez de a saltos: el ajuste a la
+  // cuadricula es solo para la sombra de destino, no para lo que agarras.
+  flotante.mover(ev.clientX, ev.clientY - escenario.ladoCeldaEnPantalla() * ALTURA_DEDO);
+
   if (!escenario.dentro(ev.clientX, ev.clientY, HOLGURA)) {
     escenario.limpiarPreview();
     arrastre.celda = null;
@@ -360,6 +385,7 @@ function soltarArrastre() {
   const { pieza, celda } = arrastre;
   arrastre = null;
   document.body.classList.remove('arrastrando');
+  flotante.soltar();
   if (celda === null) {
     escenario.limpiarPreview();
     return;
@@ -382,6 +408,8 @@ async function iniciar() {
   estado = nuevaPartida({ monedas: guardado.monedas ?? 120, mejor: guardado.mejor ?? 0 });
 
   escenario = await new Escenario($('tablero'), { reducido }).iniciar();
+  flotante = new PiezaFlotante($('flotantes'));
+  window.addEventListener('resize', () => flotante.redimensionar(escenario.ladoCeldaEnPantalla()));
   pintarTodo();
 
   const lienzo = escenario.app.canvas;
@@ -415,6 +443,7 @@ async function iniciar() {
     if (estado.seleccionada !== null && !arrastre) {
       arrastre = { pieza: estado.seleccionada, celda: null };
       document.body.classList.add('arrastrando');
+      levantarFlotante(estado.seleccionada, ev.clientX, ev.clientY);
       moverArrastre(ev);
     }
   });
@@ -483,7 +512,7 @@ async function iniciar() {
   window.__nova = {
     get estado() { return estado; },
     set estado(v) { estado = v; pintarTodo(); },
-    escenario, sonido,
+    escenario, sonido, flotante,
     forzar: (parche) => { estado = { ...estado, ...parche }; pintarTodo(); },
   };
 }

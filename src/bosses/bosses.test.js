@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  JEFES, EL_BLOQUEADOR, EL_BASURERO, EL_TACANO, EL_GIGANTE,
+  JEFES, EL_BLOQUEADOR, EL_BASURERO, EL_TACANO, EL_GIGANTE, EL_ENCOGEDOR, LA_CUOTA,
   elegirJefe, tocaJefe, activar, avanzar, proximoUmbral, PRIMER_UMBRAL,
 } from './index.js';
 import { crearTablero, BLOQUEADA, indice, celdasDeFila, lineasCompletas } from '../engine/board.js';
@@ -123,12 +123,29 @@ describe('El Basurero', () => {
 });
 
 describe('El Tacaño y El Gigante', () => {
-  it('el Tacaño reparte 2 piezas en vez de 3', () => {
+  // Version corregida: la primera daba 2 piezas en vez de 3, y eso BENEFICIABA
+  // al jugador (menos piezas obligatorias = mas libertad). Ahora quita la
+  // eleccion, que es el recurso real.
+  it('el Tacaño solo deja usar la primera pieza libre', () => {
     const conJefe = activar(partidaCon(), EL_TACANO, azarFijo).estado;
-    // gastar las 3 piezas actuales fuerza el reparto nuevo
-    const gastadas = { ...conJefe, piezas: conJefe.piezas.map((p, i) => ({ ...p, usada: i > 0 })) };
-    const { estado } = jugar(gastadas, 0, 0);
-    expect(estado.piezas).toHaveLength(2);
+    const rechazo = jugar(conJefe, 2, indice(4, 4));
+    expect(rechazo.sucesos[0]).toMatchObject({ tipo: 'rechazado', razon: 'jefe-la-bloquea' });
+    expect(rechazo.estado.tablero.filter(Boolean)).toHaveLength(0);
+  });
+
+  it('el Tacaño SI deja usar la primera', () => {
+    const conJefe = activar(partidaCon(), EL_TACANO, azarFijo).estado;
+    const { estado, sucesos } = jugar(conJefe, 0, indice(4, 4));
+    expect(sucesos.some((s) => s.tipo === 'colocada')).toBe(true);
+    expect(estado.tablero.filter(Boolean).length).toBeGreaterThan(0);
+  });
+
+  it('gastada la primera, la segunda pasa a ser la permitida', () => {
+    const conJefe = activar(partidaCon(), EL_TACANO, azarFijo).estado;
+    const usadaLaPrimera = { ...conJefe,
+      piezas: conJefe.piezas.map((p, i) => ({ ...p, usada: i === 0 })) };
+    const { sucesos } = jugar(usadaLaPrimera, 1, indice(4, 4));
+    expect(sucesos.some((s) => s.tipo === 'colocada')).toBe(true);
   });
 
   it('el Gigante solo reparte piezas de 4 celdas o mas', () => {
@@ -141,12 +158,12 @@ describe('El Tacaño y El Gigante', () => {
     }
   });
 
-  it('al irse el Tacaño vuelven las 3 piezas', () => {
+  it('al irse el Tacaño vuelve la libertad de elegir', () => {
     let estado = activar(partidaCon(), EL_TACANO, azarFijo).estado;
     for (let i = 0; i < EL_TACANO.turnos; i++) estado = avanzar(estado, azarFijo).estado;
     expect(estado.jefe).toBe(null);
-    const gastadas = { ...estado, piezas: estado.piezas.map((p, i) => ({ ...p, usada: i > 0 })) };
-    expect(jugar(gastadas, 0, 0).estado.piezas).toHaveLength(3);
+    const { sucesos } = jugar(estado, 2, indice(4, 4));
+    expect(sucesos.some((s) => s.tipo === 'colocada')).toBe(true);
   });
 });
 
@@ -178,5 +195,86 @@ describe('el jefe dentro de la partida', () => {
     for (let i = 0; i < EL_TACANO.turnos; i++) estado = avanzar(estado, azarFijo).estado;
     expect(estado.proximoJefeEn).toBeGreaterThan(3000);
     expect(tocaJefe(estado)).toBe(false);
+  });
+});
+
+describe('El Encogedor', () => {
+  it('sella el borde y deja un 7x7 jugable', () => {
+    const { estado } = activar(partidaCon(), EL_ENCOGEDOR, azarFijo);
+    // ultima fila (8) + ultima columna (8) - la esquina compartida = 15
+    expect(estado.tablero.filter((c) => c === BLOQUEADA)).toHaveLength(15);
+    for (let f = 0; f < 8; f++) expect(estado.tablero[indice(f, 7)]).toBe(BLOQUEADA);
+    for (let c = 0; c < 8; c++) expect(estado.tablero[indice(7, c)]).toBe(BLOQUEADA);
+    // el 7x7 de adentro queda libre
+    expect(estado.tablero[indice(6, 6)]).toBe(null);
+  });
+
+  it('NO pisa bloques que ya estaban en el borde', () => {
+    const t = crearTablero();
+    t[indice(7, 0)] = 'rosa';
+    const { estado } = activar(partidaCon({ tablero: t }), EL_ENCOGEDOR, azarFijo);
+    expect(estado.tablero[indice(7, 0)]).toBe('rosa');
+  });
+
+  it('devuelve el tablero completo al irse', () => {
+    let estado = activar(partidaCon(), EL_ENCOGEDOR, azarFijo).estado;
+    for (let i = 0; i < EL_ENCOGEDOR.turnos; i++) estado = avanzar(estado, azarFijo).estado;
+    expect(estado.tablero.some((c) => c === BLOQUEADA)).toBe(false);
+    expect(estado.jefe).toBe(null);
+  });
+});
+
+describe('La Cuota', () => {
+  it('fija el objetivo sobre el puntaje del momento', () => {
+    const { estado } = activar(partidaCon({ puntaje: 3000 }), LA_CUOTA, azarFijo);
+    expect(estado.jefe.objetivo).toBe(3000 + LA_CUOTA.meta);
+    expect(estado.jefe.cumplida).toBe(false);
+  });
+
+  it('se marca cumplida apenas se alcanza el objetivo', () => {
+    let estado = activar(partidaCon({ puntaje: 0 }), LA_CUOTA, azarFijo).estado;
+    estado = { ...estado, puntaje: LA_CUOTA.meta + 10 };
+    const r = avanzar(estado, azarFijo);
+    expect(r.sucesos.some((s) => s.tipo === 'cuota-cumplida')).toBe(true);
+    expect(r.estado.jefe.cumplida).toBe(true);
+  });
+
+  it('cumplirla y despues bajar de puntaje NO la desmarca', () => {
+    // El puntaje nunca baja jugando, pero la regla tiene que ser a prueba de
+    // eso: una meta alcanzada esta alcanzada.
+    let estado = activar(partidaCon({ puntaje: 0 }), LA_CUOTA, azarFijo).estado;
+    estado = avanzar({ ...estado, puntaje: LA_CUOTA.meta + 10 }, azarFijo).estado;
+    expect(estado.jefe.cumplida).toBe(true);
+    estado = avanzar({ ...estado, puntaje: 0 }, azarFijo).estado;
+    expect(estado.jefe.cumplida).toBe(true);
+  });
+
+  it('si no llegas, tira basura al irse pero NO te mata', () => {
+    let estado = activar(partidaCon({ puntaje: 0 }), LA_CUOTA, azarFijo).estado;
+    let sucesos = [];
+    for (let i = 0; i < LA_CUOTA.turnos; i++) {
+      const r = avanzar(estado, azarMedio);
+      estado = r.estado;
+      sucesos.push(...r.sucesos);
+    }
+    const fallo = sucesos.find((s) => s.tipo === 'cuota-fallada');
+    expect(fallo).toBeTruthy();
+    expect(fallo.bloques).toBeGreaterThan(0);
+    expect(estado.terminada).toBeFalsy();   // molesta, no mata
+    expect(estado.tablero.filter(Boolean).length).toBe(fallo.bloques);
+  });
+
+  it('si llegas, se va sin castigo', () => {
+    let estado = activar(partidaCon({ puntaje: 0 }), LA_CUOTA, azarFijo).estado;
+    estado = { ...estado, puntaje: LA_CUOTA.meta + 500 };
+    let sucesos = [];
+    for (let i = 0; i < LA_CUOTA.turnos; i++) {
+      const r = avanzar(estado, azarMedio);
+      estado = r.estado;
+      sucesos.push(...r.sucesos);
+    }
+    expect(sucesos.some((s) => s.tipo === 'cuota-premio')).toBe(true);
+    expect(sucesos.some((s) => s.tipo === 'cuota-fallada')).toBe(false);
+    expect(estado.tablero.filter(Boolean)).toHaveLength(0);
   });
 });
