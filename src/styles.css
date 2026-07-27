@@ -1012,15 +1012,24 @@ html[data-tema="jugoso"] .pieza-flotante i {
     gap: 10px;
   }
 
-  /* Tablero y bandeja lado a lado */
+  /* Rejilla en vez de fila: asi la cabecera (combo y estado) queda ARRIBA de
+     las dos columnas. Con flex-row terminaba de costado, flotando al lado del
+     tablero como si fuera otra columna mas. */
   .tablero-marco {
-    flex-direction: row;
-    align-items: center;
+    display: grid;
+    grid-template-columns: auto 190px;
+    grid-template-areas:
+      "cabeza  cabeza"
+      "tablero bandeja";
     justify-content: center;
-    gap: 26px;
+    align-content: center;
+    column-gap: 26px;
+    row-gap: 10px;
   }
 
-  .tablero-caja { flex: 0 0 auto; }
+  .tablero-cabeza { grid-area: cabeza; justify-self: center; }
+  .tablero-caja { grid-area: tablero; }
+  .bandeja { grid-area: bandeja; }
 
   /* La bandeja pasa a columna, a la derecha del tablero */
   .bandeja {
@@ -1040,8 +1049,6 @@ html[data-tema="jugoso"] .pieza-flotante i {
 
   .mini span { --mini: 26px; }
 
-  /* El estado deja de flotar arriba del tablero y va con el resto */
-  .tablero-cabeza { order: -1; }
 }
 
 /* Alto chico (portatil de 13", ventana a medias): el tablero manda y todo lo
