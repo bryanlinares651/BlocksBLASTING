@@ -995,3 +995,73 @@ html[data-tema="jugoso"] .pieza-flotante i {
 
 /* El estado va pegado al tablero, no flotando en el aire */
 .tablero-cabeza { margin-bottom: 0; }
+
+/* ==========================================================================
+   PANTALLA ANCHA (computadora, tablet apaisada)
+   ==========================================================================
+   El layout de arriba apila todo en una columna, que es lo correcto en un
+   telefono vertical. En una pantalla ancha eso deja los costados vacios y
+   comprime todo abajo hasta que los poderes se montan sobre las piezas.
+   Aca el tablero se va a la izquierda y la bandeja al costado: se usa el
+   ancho, que es lo que sobra, en vez del alto, que es lo que falta. */
+
+@media (min-width: 820px) and (orientation: landscape) {
+  .app {
+    width: min(100%, 1000px);
+    padding-inline: 20px;
+    gap: 10px;
+  }
+
+  /* Tablero y bandeja lado a lado */
+  .tablero-marco {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+  }
+
+  .tablero-caja { flex: 0 0 auto; }
+
+  /* La bandeja pasa a columna, a la derecha del tablero */
+  .bandeja {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 1fr;
+    width: 190px;
+    height: min(100%, 62dvh);
+    flex: 0 0 auto;
+    gap: 10px;
+  }
+
+  .pieza {
+    min-height: 0;
+    border-radius: var(--radio);
+    background: oklch(0 0 0 / 0.14);
+  }
+
+  .mini span { --mini: 26px; }
+
+  /* El estado deja de flotar arriba del tablero y va con el resto */
+  .tablero-cabeza { order: -1; }
+}
+
+/* Alto chico (portatil de 13", ventana a medias): el tablero manda y todo lo
+   demas se aprieta antes que aparezca scroll. */
+@media (max-height: 620px) and (orientation: landscape) {
+  .puntaje-grande strong { font-size: 30px; }
+  .nivel-chip, .barra-xp { display: none; }
+  .poder { width: 44px; height: 44px; }
+  .poder .poder-icono { font-size: 17px; }
+  .app { gap: 6px; }
+}
+
+/* --- Detalles de raton, que en telefono no existen --- */
+
+@media (hover: hover) and (pointer: fine) {
+  .pieza:not([data-usada="1"]) { cursor: grab; }
+  .pieza:not([data-usada="1"]):hover { transform: translateY(-3px) scale(1.04); }
+  .pieza[data-elegida="1"] { cursor: grabbing; }
+  .tablero { cursor: pointer; }
+  .poder:not(:disabled):hover { border-color: var(--borde-vivo); }
+  .icono:hover { background: var(--celda); color: var(--tinta); }
+  .articulo:hover { border-color: var(--borde-vivo); }
+}
