@@ -1031,6 +1031,12 @@ html[data-tema="jugoso"] .pieza-flotante i {
   .tablero-caja { grid-area: tablero; }
   .bandeja { grid-area: bandeja; }
 
+  /* Tamaño explicito: dentro de una columna `auto` de rejilla, un `min(100%,…)`
+     se vuelve circular (el ancho depende del contenido y el contenido del
+     ancho) y el tablero colapsaba a la mitad de lo que cabia. */
+  .tablero { width: min(56dvh, 46vw); }
+  .bandeja { height: min(56dvh, 46vw); }
+
   /* La bandeja pasa a columna, a la derecha del tablero */
   .bandeja {
     grid-template-columns: 1fr;
