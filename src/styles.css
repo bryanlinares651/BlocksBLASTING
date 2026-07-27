@@ -32,7 +32,8 @@
 
 html, body {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;      /* nada de scroll: todo tiene que caber */
   background: var(--noche-honda);
 }
 
@@ -59,13 +60,20 @@ body.arrastrando {
   touch-action: none;
 }
 
+/* UNA sola pantalla, sin scroll. Bryan lo pidio explicito y ademas el scroll
+   era el 90% de la friccion medida: el boton de tienda quedaba a 332px de
+   distancia para algo que se usa a mitad de partida.
+   `100dvh` y no `100vh` porque en Safari iOS la barra de direcciones cambia de
+   alto al hacer scroll, y con vh el layout salta. */
 .app {
   width: min(100%, 560px);
+  height: 100dvh;
   margin-inline: auto;
-  padding: max(14px, env(safe-area-inset-top)) 14px calc(22px + env(safe-area-inset-bottom));
+  padding: max(8px, env(safe-area-inset-top)) 12px calc(8px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 8px;
+  overflow: hidden;
 }
 
 button {
@@ -78,8 +86,56 @@ button {
 
 /* --- Barra superior --- */
 
-.barra { display: flex; align-items: center; justify-content: space-between; }
-.marca { display: flex; align-items: center; gap: 11px; }
+.barra { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+
+.cifra {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cifra .ico { font-size: 15px; }
+.cifra.corona { color: var(--p-ambar); }
+.cifra.oro { color: var(--p-ambar); opacity: 0.85; font-size: 15px; }
+.acciones { margin-left: auto; }
+
+/* El puntaje es el protagonista, como en los juegos del genero: grande,
+   centrado y sin etiqueta que lo acompañe. */
+.puntaje-grande { text-align: center; flex: 0 0 auto; }
+
+.puntaje-grande strong {
+  display: block;
+  font-size: clamp(38px, 12vw, 56px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 3px 14px oklch(0.10 0.03 265 / 0.5);
+}
+
+.nivel-chip {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.nivel-chip i { font-style: normal; }
+
+.barra-xp {
+  display: block;
+  height: 3px;
+  width: 0;
+  margin: 4px auto 0;
+  max-width: 180px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--p-cyan), var(--p-violeta));
+  transition: width 420ms var(--salida);
+}
 
 .sello {
   width: 40px; height: 40px;
@@ -189,9 +245,10 @@ button {
 /* --- Banda del jefe --- */
 
 .banda-jefe {
+  flex: 0 0 auto;
   border: 1px solid var(--jefe);
   border-radius: var(--radio);
-  padding: 10px 13px;
+  padding: 6px 11px;
   background: color-mix(in oklab, var(--jefe) 14%, var(--noche));
   animation: latido 2s ease-in-out infinite;
 }
@@ -220,25 +277,33 @@ button {
   padding: 2px 9px;
 }
 
-.banda-jefe p { margin: 4px 0 0; font-size: 12px; color: var(--tinta-suave); }
+.banda-jefe p { margin: 2px 0 0; font-size: 11px; color: var(--tinta-suave); }
 
 /* --- Tablero --- */
 
 /* Sin esquinas redondeadas: Bryan lo pidio explicito, y ademas un marco recto
    hace que la cuadricula se lea como una maquina y no como una tarjeta. */
 .tablero-marco {
-  background: linear-gradient(160deg, oklch(0.22 0.040 266 / 0.9), oklch(0.16 0.032 265 / 0.94));
-  border: 1px solid var(--borde);
+  flex: 1 1 auto;
+  min-height: 0;              /* sin esto el flex no deja encoger y vuelve el scroll */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 6px;
+  background: none;
+  border: 0;
   border-radius: 0;
-  padding: 13px;
-  box-shadow: 0 18px 50px oklch(0.08 0.03 265 / 0.55);
+  padding: 0;
+  box-shadow: none;
 }
 
 .tablero-cabeza {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  margin-bottom: 10px;
+  gap: 10px;
+  min-height: 26px;
+  flex: 0 0 auto;
 }
 
 .tablero-cabeza h2 {
@@ -261,12 +326,15 @@ button {
 
 .tablero {
   touch-action: none;
-  border-radius: 0;
+  border-radius: 10px;
   overflow: hidden;
-  background: oklch(0.145 0.030 265);
+  background: var(--tablero-fondo, oklch(0.145 0.030 265));
   display: grid;
   place-items: center;
   aspect-ratio: 1;
+  width: min(100%, 62dvh);    /* que nunca empuje la bandeja fuera de pantalla */
+  margin-inline: auto;
+  box-shadow: inset 0 2px 14px oklch(0.05 0.02 265 / 0.5);
 }
 
 .tablero canvas { display: block; width: 100%; height: 100%; }
@@ -276,40 +344,48 @@ button {
 .bandeja {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 13px;
+  gap: 6px;
+  margin-top: 0;
+  /* Se queda con el espacio que sobra despues del tablero: en una pantalla
+     alta las piezas se ven grandes, en una corta se achican solas y nunca
+     aparece scroll. */
+  flex: 1 1 auto;
+  min-height: 74px;
+  align-items: center;
 }
 
 .pieza {
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  min-height: 82px;
+  height: 100%;
+  min-height: 74px;
   display: grid;
   place-items: center;
-  padding: 9px;
+  padding: 4px;
   border-radius: var(--radio);
-  background: oklch(0.185 0.030 265);
-  border: 1px solid var(--borde);
-  transition: transform 180ms var(--salida-firme), border-color 180ms var(--salida-firme),
-              opacity 220ms var(--salida-firme);
+  background: none;
+  border: 0;
+  transition: transform 160ms var(--salida-firme), opacity 200ms var(--salida-firme);
 }
 
-.pieza[data-elegida="1"] {
-  border-color: var(--p-cyan);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px oklch(0.70 0.12 200 / 0.22);
-}
+.pieza[data-elegida="1"] { transform: translateY(-4px) scale(1.06); }
 
 .pieza[data-usada="1"] { opacity: 0.16; pointer-events: none; }
 
 .mini { display: grid; gap: 3px; }
 
 .mini span {
-  width: 15px; height: 15px;
-  border-radius: 4px;
+  width: var(--mini, 19px);
+  height: var(--mini, 19px);
+  border-radius: calc(var(--mini, 19px) * 0.26);
   background: var(--c);
-  box-shadow: inset 0 2px 0 oklch(1 0 0 / 0.28), 0 2px 3px oklch(0.10 0.03 265 / 0.5);
+  /* Sombra DURA abajo, sin difuminar: es lo que da el aspecto de ficha con
+     grosor de la referencia, en vez de cuadrito plano con sombra suave. */
+  box-shadow:
+    inset 0 3px 0 oklch(1 0 0 / 0.32),
+    inset 0 -3px 0 oklch(0 0 0 / 0.20),
+    0 3px 0 color-mix(in oklab, var(--c) 62%, black);
 }
 
 .mini span[data-vacio="1"] { visibility: hidden; }
@@ -339,9 +415,32 @@ button {
   color: var(--tinta-suave);
 }
 
-.poderes { display: grid; gap: 8px; }
+.poderes {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
 
-.poder, .articulo {
+/* Los poderes pasan a ser botones redondos en una fila: ocupan una franja
+   fina en vez de un panel entero, y asi todo entra en una pantalla. */
+.poder {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  transition: transform 140ms var(--salida-firme), border-color 140ms var(--salida-firme),
+              opacity 140ms var(--salida-firme);
+}
+
+.poder:not(:disabled):active { transform: scale(0.92); }
+.poder-tienda { background: color-mix(in oklab, var(--p-ambar) 16%, var(--superficie)); }
+
+.articulo {
   width: 100%;
   display: flex;
   align-items: center;
@@ -351,8 +450,7 @@ button {
   border-radius: var(--radio-chico);
   background: var(--superficie);
   border: 1px solid var(--borde);
-  transition: border-color 160ms var(--salida-firme), background 160ms var(--salida-firme),
-              opacity 160ms var(--salida-firme);
+  transition: border-color 160ms var(--salida-firme), background 160ms var(--salida-firme);
 }
 
 .poder:not(:disabled):active,
@@ -365,13 +463,34 @@ button {
   background: color-mix(in oklab, var(--p-cyan) 12%, var(--superficie));
 }
 
-.poder-icono {
+.poder .poder-icono {
+  width: auto; height: auto;
+  background: none;
+  font-size: 21px;
+  color: var(--p-cyan);
+}
+
+.articulo .poder-icono {
   width: 30px; height: 30px;
   display: grid; place-items: center;
   border-radius: 9px;
   background: var(--noche);
   font-size: 15px;
   color: var(--p-cyan);
+}
+
+/* La cuenta (o el precio) va como globito en la esquina del boton */
+.poder .cuenta {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 21px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: var(--noche-honda);
+  border: 1px solid var(--borde-vivo);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .poder-texto { flex: 1; }
@@ -385,19 +504,7 @@ button {
   color: var(--p-ambar);
 }
 
-.tienda-abrir {
-  width: 100%;
-  margin-top: 10px;
-  padding: 11px;
-  border-radius: var(--radio-chico);
-  background: var(--celda);
-  border: 1px solid var(--borde);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--p-cyan);
-}
 
-.tienda-abrir:active { background: var(--borde); }
 
 /* --- Capas (tienda, fin, jefe) --- */
 
@@ -578,7 +685,7 @@ button {
   .app { padding-inline: 10px; gap: 10px; }
   .tablero-marco { padding: 10px; }
   .dato strong { font-size: 19px; }
-  .mini span { width: 13px; height: 13px; }
+  .mini span { --mini: 15px; }   /* la variable, no el tamaño fijo: si no, pisa la escala elastica */
   .pieza { min-height: 72px; }
 }
 
@@ -733,7 +840,7 @@ html[data-tema="jugoso"] .pieza-flotante i {
 
 /* --- Cartel de "vas a romper N lineas" --- */
 
-.tablero-caja { position: relative; }
+.tablero-caja { position: relative; display: flex; justify-content: center; }
 
 /* Va ENCIMA del tablero y sin capturar toques: es un aviso, no un boton.
    El resaltado de las celdas ya late en el canvas; esto le pone el numero,
@@ -878,3 +985,13 @@ html[data-tema="jugoso"] .pieza-flotante i {
   font-size: 12px;
   opacity: 0.85;
 }
+
+
+/* En pantallas altas las fichas de la bandeja crecen; en cortas se achican.
+   Asi la bandeja llena el espacio sobrante en vez de dejar un hueco muerto. */
+@media (min-height: 700px) { .mini span { --mini: 24px; } }
+@media (min-height: 820px) { .mini span { --mini: 27px; } }
+@media (max-height: 640px) { .mini span { --mini: 16px; } }
+
+/* El estado va pegado al tablero, no flotando en el aire */
+.tablero-cabeza { margin-bottom: 0; }

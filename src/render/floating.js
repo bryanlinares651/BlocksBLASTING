@@ -10,10 +10,10 @@
 // el tablero (la pieza tiene que poder verse tambien sobre la bandeja, que esta
 // afuera), y `transform` lo compone la placa de video sin repintar nada.
 
-// Mas alto = mas pegado al dedo. En 26 todavia se sentia un pelin de arrastre;
-// en 38 la pieza va practicamente bajo el dedo pero conserva el suavizado que
-// evita que se vea a saltos cuando el dedo se mueve rapido.
-const SEGUIMIENTO = 38;
+// Mas alto = mas pegado al dedo. Recorrido: 26 se sentia arrastrado, 38 mejor,
+// 70 va practicamente bajo el dedo. Se deja algo de suavizado a proposito: en
+// 0 la pieza copia el ruido del sensor tactil y tiembla.
+const SEGUIMIENTO = 70;
 
 export class PiezaFlotante {
   constructor(contenedor) {
@@ -102,14 +102,14 @@ export class PiezaFlotante {
     const k = 1 - Math.exp(-SEGUIMIENTO * dt);
     this.x += (this.destinoX - this.x) * k;
     this.y += (this.destinoY - this.y) * k;
-    this.escala += (this.destinoEscala - this.escala) * (1 - Math.exp(-18 * dt));
+    this.escala += (this.destinoEscala - this.escala) * (1 - Math.exp(-26 * dt));
 
     // Se inclina hacia donde va, como una carta arrastrada. Es el detalle que
     // convierte "se mueve" en "tiene peso".
     const velocidad = (this.x - this.ultimoX) / Math.max(dt, 0.001);
     this.ultimoX = this.x;
     const objetivoIncl = Math.max(-9, Math.min(9, velocidad * 0.012));
-    this.inclinacion += (objetivoIncl - this.inclinacion) * (1 - Math.exp(-12 * dt));
+    this.inclinacion += (objetivoIncl - this.inclinacion) * (1 - Math.exp(-20 * dt));
 
     this.pintar();
   }

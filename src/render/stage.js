@@ -109,12 +109,15 @@ export class Escenario {
     const lado = Math.ceil(this.bloque * 2); // al doble, para que no pixele al escalar
     const r = lado * (this.tema?.bloque?.radio ?? RADIO);
 
+    // Ficha con GROSOR, no cuadrito plano: base oscura sobresaliendo abajo
+    // (sombra dura, sin difuminar), cuerpo encima, y una banda clara arriba.
+    // Es lo que hace que se lea como pieza fisica apoyada en el tablero.
     const construir = (hex, hexClaro, hexOscuro) => {
       const g = new Graphics();
-      g.roundRect(0, lado * 0.08, lado, lado * 0.92, r).fill(hexOscuro);     // sombra corta
-      g.roundRect(0, 0, lado, lado * 0.92, r).fill(hex);                      // cuerpo
-      g.roundRect(lado * 0.12, lado * 0.08, lado * 0.76, lado * 0.3, r * 0.7)
-        .fill({ color: hexClaro, alpha: 0.55 });                              // luz de arriba
+      g.roundRect(0, lado * 0.13, lado, lado * 0.87, r).fill(hexOscuro);   // canto inferior
+      g.roundRect(0, 0, lado, lado * 0.87, r).fill(hex);                    // cara
+      g.roundRect(lado * 0.1, lado * 0.07, lado * 0.8, lado * 0.26, r * 0.6)
+        .fill({ color: hexClaro, alpha: 0.5 });                             // brillo superior
       const t = this.app.renderer.generateTexture(g);
       g.destroy();
       return t;
@@ -306,18 +309,30 @@ export class Escenario {
     if (lineas && !this.reducido) this.hazDeLuz(lineas);
 
     // FLASH BLANCO antes de reventar: 55 ms en los que el bloque se pone
-    // blanco y crece. Sin esto, las particulas aparecen de la nada; con esto,
-    // el bloque parece reventar bajo tension. Es el detalle mas barato de todo
-    // el juego y el que mas se nota.
+    // blanco y crece, para que parezca explotar bajo tension en vez de
+    // desaparecer.
+    //
+    // CLAVE: los sprites se sacan del registro AHORA mismo. El motor ya limpio
+    // esas celdas, asi que el repintado que viene enseguida las daria por
+    // vacias y destruiria los sprites — y a los 55 ms la animacion tocaria
+    // objetos muertos, reventaria DENTRO del ticker y se congelaria el juego
+    // entero (bloques que se quedan pegados en pantalla). Sacandolos del
+    // registro, el repintado ya no los conoce y viven hasta que los soltamos.
+    const muriendo = [];
+    for (const c of celdas) {
+      const sprite = this.bloques.get(c);
+      if (!sprite) continue;
+      this.bloques.delete(c);
+      muriendo.push({ celda: c, sprite });
+    }
+
     const soltar = () => {
+      for (const { celda, sprite } of muriendo) {
+        this.capaBloques.removeChild(sprite);
+        sprite.destroy();
+      }
       for (const c of celdas) {
         const { x, y } = this.posicion(c);
-        const sprite = this.bloques.get(c);
-        if (sprite) {
-          this.capaBloques.removeChild(sprite);
-          sprite.destroy();
-          this.bloques.delete(c);
-        }
         this.efectos.reventar(x, y, this.bloque, this.pixelDe(tablero[c]),
                               fuerza.particulas, this.pisoY);
       }
@@ -332,14 +347,17 @@ export class Escenario {
       return fuerza;
     }
 
-    for (const c of celdas) {
-      const sprite = this.bloques.get(c);
-      if (!sprite) continue;
+    const base = this.bloque;
+    for (const { sprite } of muriendo) {
       sprite.tint = 0xffffff;
-      const base = this.bloque;
       this.animaciones.push({
         t: 0, ms: 55,
-        paso: (p) => { const e = 1 + p * 0.28; sprite.width = base * e; sprite.height = base * e; },
+        paso: (p) => {
+          if (sprite.destroyed) return;   // por si algo lo mato antes de tiempo
+          const e = 1 + p * 0.28;
+          sprite.width = base * e;
+          sprite.height = base * e;
+        },
       });
     }
     setTimeout(soltar, 55);
@@ -395,11 +413,18 @@ export class Escenario {
       const a = this.animaciones[i];
       a.t += dt * 1000;
       const p = Math.min(1, a.t / a.ms);
-      a.paso(p);
-      if (p >= 1) {
-        a.fin?.();
+      // Una animacion que revienta NO puede llevarse el bucle entero: si algo
+      // falla acá, se cae el ticker y el juego se congela con los bloques
+      // pegados en pantalla. Se descarta esa animacion y las demas siguen.
+      try {
+        a.paso(p);
+        if (p >= 1) a.fin?.();
+      } catch (err) {
+        console.warn('animacion descartada:', err?.message);
         this.animaciones.splice(i, 1);
+        continue;
       }
+      if (p >= 1) this.animaciones.splice(i, 1);
     }
 
     // Latido del borde mientras hay jefe

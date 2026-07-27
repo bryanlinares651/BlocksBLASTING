@@ -26,13 +26,8 @@
 <main class="app">
 
   <header class="barra">
-    <div class="marca">
-      <div class="sello">◆</div>
-      <div>
-        <h1>NOVA BLOCKS</h1>
-        <p id="racha">Arma. Revienta. Aguanta.</p>
-      </div>
-    </div>
+    <div class="cifra corona"><span class="ico">♔</span><b id="mejor">0</b></div>
+    <div class="cifra oro"><span class="ico">🪙</span><b id="monedas">120</b></div>
     <div class="acciones">
       <button id="btn-tema" class="icono" aria-label="Cambiar estilo">◑</button>
       <button id="btn-sonido" class="icono" aria-label="Silenciar">♪</button>
@@ -40,28 +35,11 @@
     </div>
   </header>
 
-  <section class="marcadores">
-    <div class="dato">
-      <span class="etiqueta">Puntaje</span>
-      <strong id="puntaje">0</strong>
-    </div>
-    <div class="dato">
-      <span class="etiqueta">Monedas</span>
-      <strong id="monedas" class="oro">120</strong>
-    </div>
-    <div class="dato">
-      <span class="etiqueta">Mejor</span>
-      <strong id="mejor">0</strong>
-    </div>
-  </section>
-
-  <section class="nivel">
-    <div class="nivel-fila">
-      <span>Nivel <b id="nivel">1</b></span>
-      <span id="xp-texto">0 / 500</span>
-    </div>
-    <div class="progreso"><i id="barra"></i></div>
-  </section>
+  <div class="puntaje-grande">
+    <strong id="puntaje">0</strong>
+    <span class="nivel-chip">Nivel <b id="nivel">1</b> · <i id="xp-texto">0 / 500</i></span>
+    <i id="barra" class="barra-xp"></i>
+  </div>
 
   <!-- Banda del jefe: solo aparece cuando hay uno -->
   <section id="banda-jefe" class="banda-jefe" hidden>
@@ -74,7 +52,6 @@
 
   <section class="tablero-marco">
     <div class="tablero-cabeza">
-      <h2>8 × 8</h2>
       <div id="combo" class="combo" data-visible="0" aria-live="polite">
         <span class="combo-etiqueta">COMBO</span>
         <span class="combo-numero">×2</span>
@@ -89,39 +66,25 @@
       </div>
     </div>
     <div id="bandeja" class="bandeja"></div>
-    <p id="pista" class="pista">Arrastrá una pieza al tablero</p>
   </section>
 
-  <section class="panel">
-    <h3>Poderes</h3>
-    <div class="poderes">
-      <button id="btn-bomba" class="poder" disabled>
-        <span class="poder-icono">◎</span>
-        <span class="poder-texto">
-          <b>Bomba</b>
-          <small>Revienta un 3×3 donde toques</small>
-        </span>
-        <span id="cuenta-bomba" class="cuenta">0</span>
-      </button>
-      <button id="btn-rayo" class="poder" disabled>
-        <span class="poder-icono">═</span>
-        <span class="poder-texto">
-          <b>Rayo</b>
-          <small>Limpia la fila que toques</small>
-        </span>
-        <span id="cuenta-rayo" class="cuenta">0</span>
-      </button>
-      <button id="btn-lampara" class="poder" disabled>
-        <span class="poder-icono">✦</span>
-        <span class="poder-texto">
-          <b>Lámpara</b>
-          <small>Te muestra la mejor jugada</small>
-        </span>
-        <span id="cuenta-lampara" class="cuenta">0</span>
-      </button>
-    </div>
-    <button id="btn-tienda" class="tienda-abrir">Canjear monedas</button>
-  </section>
+  <nav class="poderes" aria-label="Poderes">
+    <button id="btn-bomba" class="poder" disabled aria-label="Bomba">
+      <span class="poder-icono">◎</span>
+      <span id="cuenta-bomba" class="cuenta">0</span>
+    </button>
+    <button id="btn-rayo" class="poder" disabled aria-label="Rayo">
+      <span class="poder-icono">═</span>
+      <span id="cuenta-rayo" class="cuenta">0</span>
+    </button>
+    <button id="btn-lampara" class="poder" disabled aria-label="Lámpara">
+      <span class="poder-icono">✦</span>
+      <span id="cuenta-lampara" class="cuenta">0</span>
+    </button>
+    <button id="btn-tienda" class="poder poder-tienda" aria-label="Tienda">
+      <span class="poder-icono">🛒</span>
+    </button>
+  </nav>
 
 </main>
 

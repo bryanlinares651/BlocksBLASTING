@@ -27,11 +27,14 @@ export const TEMAS = [
       verde:   { L: 0.80, C: 0.165, H: 150 },
       naranja: { L: 0.76, C: 0.170, H: 45 },
     },
+    // Violeta medio, no azul noche: es la referencia que paso Bryan. El fondo
+    // claro y el tablero oscuro invierten el contraste habitual y hacen que la
+    // cuadricula se lea como una bandeja apoyada sobre la mesa.
     fondo: {
-      base: css(0.15, 0.035, 275),
-      resplandor: css(0.32, 0.080, 280),
-      celda: ok(0.26, 0.034, 275),
-      tablero: ok(0.155, 0.032, 275),
+      base: css(0.52, 0.115, 292),
+      resplandor: css(0.58, 0.130, 296),
+      celda: ok(0.30, 0.055, 285),
+      tablero: ok(0.25, 0.050, 285),
     },
     bloque: { radio: 0.28, brillo: 0.62, sombra: 0.26, aplaste: 1 },
     particulas: { vida: 0.9, gravedad: 2300, rebote: 0.5 },
@@ -117,5 +120,7 @@ export function aplicarCss(tema) {
   }
   raiz.style.setProperty('--noche-honda', tema.fondo.base);
   raiz.style.setProperty('--resplandor', tema.fondo.resplandor);
+  const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
+  raiz.style.setProperty('--tablero-fondo', hex(tema.fondo.tablero));
   raiz.dataset.tema = tema.id;
 }
