@@ -5,6 +5,7 @@ import { LADO, coordenadas, indice, celdasDe, BLOQUEADA } from './engine/board.j
 import { Escenario } from './render/stage.js';
 import { flotarPuntos } from './render/effects.js';
 import { PiezaFlotante } from './render/floating.js';
+import { Celebracion } from './render/celebracion.js';
 import { PALETA, PALETA_CSS, COLORES_JEFE, intensidad } from './render/theme.js';
 import { Sonido } from './audio/sfx.js';
 import { TEMAS, temaPorId, siguienteTema, aplicarCss, paletaDe } from './render/temas.js';
@@ -16,6 +17,7 @@ const reducido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const sonido = new Sonido();
 let escenario;
 let flotante;
+let fiesta;
 let estado;
 let apuntando = null;   // 'bomba' | 'rayo' cuando se esta eligiendo donde
 let temaActual = TEMAS[0];
@@ -191,6 +193,7 @@ function pintarCombo(combo, centro = null) {
  */
 function celebrarTableroLimpio(suceso) {
   sonido.tableroLimpio();
+  fiesta.mensaje('¡PERFECTO!', 'epica');
   const capa = $('capa-limpio');
   const nuevo = siguienteTema(temaActual.id);
   $('limpio-bonus').textContent = `+${suceso.bonus.toLocaleString('es')}`;
@@ -234,19 +237,23 @@ function procesar(sucesos, tableroAntes) {
 
       case 'lineas-limpiadas': {
         const fuerza = intensidad(s.cantidad);
-        escenario.reventarCeldas(s.celdas, tableroAntes, s.cantidad);
-        sonido.limpiar(s.cantidad, fuerza.semitonos);
+        escenario.reventarCeldas(s.celdas, tableroAntes, s.cantidad,
+                                 { filas: s.filas, columnas: s.columnas });
+        sonido.limpiar(s.cantidad, fuerza.semitonos, s.combo ?? 1);
         const centro = escenario.centroDe(s.celdas[Math.floor(s.celdas.length / 2)]);
         const puntos = s.puntos ?? s.cantidad * s.cantidad * 70;
         flotarPuntos($('flotantes'), `+${puntos.toLocaleString('es')}`, centro.x, centro.y,
                      cssDeNombre('ambar'));
         pintarCombo(s.combo ?? 0, centro);
+        fiesta.porLineas(s.cantidad);
+        if ((s.combo ?? 0) >= 2) fiesta.porCombo(s.combo);
         const cuantas = s.cantidad === 1 ? '1 línea' : `${s.cantidad} líneas`;
         estadoTexto(s.cantidad >= 3 ? `¡${cuantas}!` : `${cuantas} fuera`, 'bien');
         break;
       }
 
       case 'combo-cortado':
+        sonido.comboCortado();
         pintarCombo(0);
         break;
 
@@ -259,6 +266,7 @@ function procesar(sucesos, tableroAntes) {
         break;
 
       case 'subio-nivel':
+        fiesta.mensaje(`NIVEL ${s.nivel}`, 'media');
         sonido.subirNivel();
         aviso(`Nivel ${s.nivel} · +${s.monedas} monedas`);
         break;
@@ -269,6 +277,7 @@ function procesar(sucesos, tableroAntes) {
         break;
 
       case 'jefe-vencido':
+        fiesta.mensaje('¡LO AGUANTASTE!', 'grande');
         sonido.jefeVencido();
         aviso(`${s.nombre} se fue`);
         estadoTexto('Tu turno');
@@ -495,6 +504,7 @@ async function iniciar() {
   aplicarCss(temaActual);
   escenario = await new Escenario($('tablero'), { reducido, tema: temaActual }).iniciar();
   flotante = new PiezaFlotante($('flotantes'));
+  fiesta = new Celebracion($('flotantes'), { reducido });
   window.addEventListener('resize', () => flotante.redimensionar(escenario.ladoCeldaEnPantalla()));
   pintarTodo();
 
@@ -625,7 +635,7 @@ async function iniciar() {
   window.__nova = {
     get estado() { return estado; },
     set estado(v) { estado = v; pintarTodo(); },
-    escenario, sonido, flotante,
+    escenario, sonido, flotante, fiesta,
     forzar: (parche) => { estado = { ...estado, ...parche }; pintarTodo(); },
   };
 }

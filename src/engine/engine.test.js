@@ -4,7 +4,7 @@ import {
   simular, celdasDeFila, celdasDeColumna, indice, BLOQUEADA, LADO,
 } from './board.js';
 import { FORMAS, repartir, repartirJugable, crearPieza, GRANDES } from './pieces.js';
-import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria, multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO } from './scoring.js';
+import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria, multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO, monedasPorLineas } from './scoring.js';
 import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, buscarConsejo } from './game.js';
 
 // Azar fijo para que los tests no dependan de la suerte.
@@ -286,7 +286,9 @@ describe('poderes', () => {
   });
 
   it('no deja usar un poder que no tenes', () => {
-    const p = nuevaPartida({ azar: azarFijo });
+    // La partida ahora arranca CON bomba y lampara, asi que hay que vaciar el
+    // inventario a proposito para probar el rechazo.
+    const p = { ...nuevaPartida({ azar: azarFijo }), poderes: { bomba: 0, rayo: 0, lampara: 0 } };
     const r = usarPoder(p, 'bomba', 0);
     expect(r.sucesos[0]).toMatchObject({ tipo: 'rechazado', razon: 'sin-poder' });
   });
@@ -303,10 +305,13 @@ describe('poderes', () => {
 
 describe('tienda', () => {
   it('compra un poder y descuenta las monedas', () => {
+    // Sin fijar el precio exacto: lo que importa es que cobre y entregue, no
+    // cuanto. Los precios se ajustan al balancear y el test no deberia romperse
+    // cada vez.
     const p = nuevaPartida({ azar: azarFijo, monedas: 100 });
     const { estado } = comprar(p, 'bomba');
-    expect(estado.monedas).toBe(60);
-    expect(estado.poderes.bomba).toBe(1);
+    expect(estado.monedas).toBeLessThan(100);
+    expect(estado.poderes.bomba).toBe(p.poderes.bomba + 1);
   });
 
   it('no deja comprar sin monedas', () => {
@@ -486,8 +491,8 @@ describe('la lampara', () => {
   it('se puede comprar en la tienda', () => {
     const p = nuevaPartida({ azar: azarFijo, monedas: 100 });
     const { estado } = comprar(p, 'lampara');
-    expect(estado.monedas).toBe(50);
-    expect(estado.poderes.lampara).toBe(1);
+    expect(estado.monedas).toBeLessThan(100);
+    expect(estado.poderes.lampara).toBe(p.poderes.lampara + 1);
   });
 });
 
@@ -629,5 +634,40 @@ describe('combo con gracia', () => {
   it('sin combo activo no avisa de riesgo', () => {
     const { sucesos } = jugar(conCombo(0), 0, 0);
     expect(sucesos.some((s) => s.tipo === 'combo-en-riesgo')).toBe(false);
+  });
+});
+
+describe('economia de poderes', () => {
+  it('una linea paga lo suficiente para un poder barato', () => {
+    // El punto: querer un poder y poder comprarlo YA, no dentro de media partida
+    expect(monedasPorLineas(1)).toBeGreaterThanOrEqual(15);
+    const p = nuevaPartida({ azar: azarFijo, monedas: monedasPorLineas(1) });
+    expect(comprar(p, 'bomba').sucesos[0].tipo).toBe('comprado');
+  });
+
+  it('la racha paga mas monedas, con techo', () => {
+    expect(monedasPorLineas(1, 5)).toBeGreaterThan(monedasPorLineas(1, 1));
+    expect(monedasPorLineas(1, 50)).toBe(monedasPorLineas(1, 7)); // el techo aplica
+  });
+
+  it('una jugada sin limpiar igual paga algo', () => {
+    expect(monedasPorLineas(0)).toBeGreaterThan(0);
+  });
+
+  it('la partida arranca con poderes para probar', () => {
+    const p = nuevaPartida({ azar: azarFijo });
+    const total = p.poderes.bomba + p.poderes.rayo + p.poderes.lampara;
+    expect(total).toBeGreaterThan(0);
+  });
+
+  it('con las monedas de arranque alcanza para varios poderes', () => {
+    // 120 monedas iniciales: tiene que dar para probar de todo, no para uno solo
+    let p = nuevaPartida({ azar: azarFijo, monedas: 120 });
+    let comprados = 0;
+    for (const art of ['bomba', 'rayo', 'lampara', 'revolver']) {
+      const r = comprar(p, art);
+      if (r.sucesos[0].tipo === 'comprado') { comprados++; p = r.estado; }
+    }
+    expect(comprados).toBe(4);
   });
 });

@@ -298,29 +298,83 @@ export class Escenario {
    * El momento importante: las celdas revientan. Cuantas mas lineas, mas
    * pedazos, mas temblor y mas destello — todo escala junto.
    */
-  reventarCeldas(celdas, tablero, cantidadLineas) {
+  reventarCeldas(celdas, tablero, cantidadLineas, lineas = null) {
     const fuerza = intensidad(cantidadLineas);
-    for (const c of celdas) {
-      const { x, y } = this.posicion(c);
-      const color = tablero[c];
-      const sprite = this.bloques.get(c);
-      if (sprite) {
-        this.capaBloques.removeChild(sprite);
-        sprite.destroy();
-        this.bloques.delete(c);
+
+    // Haz de luz que barre la fila/columna completa. Es lo que convierte
+    // "los bloques desaparecieron" en "algo los borro de un tajo".
+    if (lineas && !this.reducido) this.hazDeLuz(lineas);
+
+    // FLASH BLANCO antes de reventar: 55 ms en los que el bloque se pone
+    // blanco y crece. Sin esto, las particulas aparecen de la nada; con esto,
+    // el bloque parece reventar bajo tension. Es el detalle mas barato de todo
+    // el juego y el que mas se nota.
+    const soltar = () => {
+      for (const c of celdas) {
+        const { x, y } = this.posicion(c);
+        const sprite = this.bloques.get(c);
+        if (sprite) {
+          this.capaBloques.removeChild(sprite);
+          sprite.destroy();
+          this.bloques.delete(c);
+        }
+        this.efectos.reventar(x, y, this.bloque, this.pixelDe(tablero[c]),
+                              fuerza.particulas, this.pisoY);
       }
-      this.efectos.reventar(
-        x, y, this.bloque,
-        this.pixelDe(color),
-        fuerza.particulas,
-        this.pisoY
-      );
+      if (!this.reducido) {
+        this.temblor.golpear(fuerza.temblor, fuerza.msTemblor);
+        this.destello.disparar(fuerza.destello);
+      }
+    };
+
+    if (this.reducido) {
+      soltar();
+      return fuerza;
     }
-    if (!this.reducido) {
-      this.temblor.golpear(fuerza.temblor, fuerza.msTemblor);
-      this.destello.disparar(fuerza.destello);
+
+    for (const c of celdas) {
+      const sprite = this.bloques.get(c);
+      if (!sprite) continue;
+      sprite.tint = 0xffffff;
+      const base = this.bloque;
+      this.animaciones.push({
+        t: 0, ms: 55,
+        paso: (p) => { const e = 1 + p * 0.28; sprite.width = base * e; sprite.height = base * e; },
+      });
     }
+    setTimeout(soltar, 55);
     return fuerza;
+  }
+
+  /**
+   * Barra de luz sobre cada fila y columna limpiada: nace fina en el centro y
+   * se abre hacia los extremos.
+   */
+  hazDeLuz(lineas) {
+    const total = this.app.screen.width;
+    const grosor = this.celda * 0.9;
+    const dibujar = (horizontal, indiceLinea) => {
+      const g = new Graphics();
+      this.capaPreview.addChild(g);
+      this.animaciones.push({
+        t: 0, ms: 260,
+        paso: (p) => {
+          const largo = CURVAS.salida(Math.min(1, p * 2.2)) * total;
+          const alto = grosor * (1 - CURVAS.salidaFirme(p) * 0.75);
+          const centro = indiceLinea * this.celda + this.celda / 2;
+          g.clear();
+          if (horizontal) {
+            g.rect(total / 2 - largo / 2, centro - alto / 2, largo, alto);
+          } else {
+            g.rect(centro - alto / 2, total / 2 - largo / 2, alto, largo);
+          }
+          g.fill({ color: 0xffffff, alpha: (1 - p) * 0.85 });
+        },
+        fin: () => { g.destroy(); },
+      });
+    };
+    for (const f of lineas.filas ?? []) dibujar(true, f);
+    for (const c of lineas.columnas ?? []) dibujar(false, c);
   }
 
   marcarJefe(jefe) {

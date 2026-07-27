@@ -14,8 +14,19 @@ export function puntosPorLineas(lineas) {
   return lineas <= 0 ? 0 : lineas * lineas * 70;
 }
 
-export function monedasPorLineas(lineas) {
-  return lineas <= 0 ? 1 : lineas * 8;
+/**
+ * Monedas. Antes: 1 por jugada seca y 8 por linea, con poderes de 40 a 80.
+ * Eso son entre 5 y 10 lineas para UNA bomba: para cuando la comprabas, ya se
+ * te habia pasado el momento de usarla. Un poder que no se usa no existe.
+ *
+ * Ahora la linea paga 15 y la cadena multiplica, asi que un combo decente
+ * financia un poder en el acto — que es cuando de verdad lo querias.
+ */
+export function monedasPorLineas(lineas, combo = 1) {
+  if (lineas <= 0) return 2;
+  const base = lineas * 15;
+  const porRacha = Math.min(2.5, 1 + Math.max(0, combo - 1) * 0.25);
+  return Math.round(base * porRacha);
 }
 
 /**

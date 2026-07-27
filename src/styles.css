@@ -778,3 +778,91 @@ html[data-tema="jugoso"] .pieza-flotante i {
 /* Con jefe activo hereda su color, para que se lea como "esto pasa ahora" */
 .rompe[data-jefe="1"] span,
 .rompe[data-jefe="1"] small { color: var(--jefe); }
+
+/* --- Mensajes de celebracion --- */
+
+.celebracion {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.celebra {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  font-size: calc(58px * var(--escala, 1));
+  animation: celebra-salir 1100ms var(--salida) forwards;
+  /* Sin esto, dos mensajes seguidos empujan el layout y el primero salta */
+  position: absolute;
+}
+
+/* Cada letra entra por su cuenta: es lo que hace que el texto se sienta
+   lanzado y no simplemente aparecido. */
+.celebra span {
+  display: inline-block;
+  animation: letra-entra 420ms var(--salida) backwards;
+}
+
+@keyframes letra-entra {
+  from { transform: translateY(26px) scale(0.4) rotate(-8deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+@keyframes celebra-salir {
+  0%   { transform: scale(1); opacity: 1; }
+  62%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1.18) translateY(-26px); opacity: 0; }
+}
+
+.celebra.epica {
+  color: var(--p-ambar);
+  text-shadow:
+    0 0 30px color-mix(in oklab, var(--p-ambar) 85%, transparent),
+    0 0 80px color-mix(in oklab, var(--p-ambar) 55%, transparent),
+    0 6px 0 oklch(0.30 0.10 60);
+}
+
+.celebra.grande {
+  color: var(--p-rosa);
+  text-shadow:
+    0 0 26px color-mix(in oklab, var(--p-rosa) 80%, transparent),
+    0 5px 0 oklch(0.28 0.10 350);
+}
+
+.celebra.media {
+  color: var(--p-cyan);
+  text-shadow: 0 0 22px color-mix(in oklab, var(--p-cyan) 75%, transparent),
+               0 4px 0 oklch(0.26 0.07 200);
+}
+
+.celebra.chica {
+  color: var(--p-verde);
+  text-shadow: 0 0 18px color-mix(in oklab, var(--p-verde) 70%, transparent);
+}
+
+/* La racha va debajo y mas chica: son dos ejes distintos (cuantas lineas de
+   una vez / cuantas jugadas seguidas) y compiten si tienen el mismo peso. */
+.celebra.racha {
+  color: var(--p-violeta);
+  letter-spacing: 0.16em;
+  transform: translateY(52px);
+  text-shadow: 0 0 20px color-mix(in oklab, var(--p-violeta) 75%, transparent);
+  animation: racha-salir 1000ms var(--salida) forwards;
+}
+
+@keyframes racha-salir {
+  0%   { transform: translateY(52px) scale(0.8); opacity: 0; }
+  25%  { transform: translateY(52px) scale(1.06); opacity: 1; }
+  100% { transform: translateY(20px) scale(1); opacity: 0; }
+}
+
+@media (max-width: 380px) {
+  .celebra { font-size: calc(48px * var(--escala, 1)); }
+}

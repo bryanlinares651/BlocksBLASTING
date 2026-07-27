@@ -1,0 +1,31 @@
+He auditado los cuatro archivos del proyecto real Nova Blocks (`src/audio/sfx.js`, `src/render/effects.js`, `src/render/theme.js` y `src/render/temas.js`) para diagnosticar exactamente por qué romper líneas no produce esa sensación satisfactoria ("game feel / juice") que tiene *Block Blast*.
+
+He redactado el informe completo y detallado en [02-gemini-audiovisual.md](file:///Users/bryan/Documents/nova-blocks/docs/adictivo/02-gemini-audiovisual.md).
+
+---
+
+### Resumen del Análisis y Soluciones
+
+#### 1. ¿Qué le falta al sistema de sonido actual? (`src/audio/sfx.js`)
+* **Falta de Sub-Grave (Impacto/Thump):** La frecuencia base arranca en `320 Hz` (rango medio). Romper líneas no tiene cuerpo grave en parlantes de celular.
+  * *Solución WebAudio:* Agregar un oscilador senoidal (`sine`) rápido de 130 Hz a 40 Hz en 70 ms con envolvente exponencial.
+* **Ataque Plano (Sin "Snap" o "Pop"):** La envolvente actual tiene un ataque gradual de 5 ms. Romper bloques necesita un transitorio crujiente en los primeros 1-2 ms (rápida rampa descendente de 2200 Hz a 300 Hz en 6 ms).
+* **Simultaneidad Acústica:** En una fila de 8 bloques, todos disparan al milisegundo 0. Debe escalonarse el disparo con un retraso secuencial de 12–18 ms celda por celda para que la fila suene "desabrochándose" en cadena.
+
+#### 2. El Sonido de Recompensa Ascendente (Verificación de `semitonos`)
+* **Diagnóstico en código real:** En `sfx.js` existe `semitonos(hz, n)` y `limpiar(lineas, semis)`. **Sin embargo**, en `src/main.js` solo se le pasa `fuerza.semitonos` proveniente de `intensidad(lineas)` (0, 3, 7, 12 semitonos).
+* **El Problema:** El pitch sube únicamente si limpiás *más líneas juntas en 1 solo movimiento*. **El juego ignora por completo `s.combo` (las jugadas consecutivas que limpian algo)**. Limpiar 1 línea en 5 turnos seguidos suena 5 veces en la misma nota (320 Hz).
+* **Mejora:** Mapear `s.combo` a una **Escala Pentatónica Mayor** (`[0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24]`) e integrar `s.combo` en la llamada a `sonido.limpiar()`. Así cada racha consecutiva sube un peldaño musical de dopamina.
+
+#### 3. Efectos Visuales Faltantes (Ordenados por Impacto/Esfuerzo)
+1. **Haz de Luz / Rayo de Fila (Line Beam):** Impacto Muy Alto / Esfuerzo Bajo. Barra brillante sobre la fila que escala en Y ($0 \to 1.5\times$) en 40 ms y desvanece alfa en 160 ms con curva `CURVAS.salidaFirme`.
+2. **Flash Blanco y "Pop Scale" Pre-Explosión:** Impacto Alto / Esfuerzo Bajo. Celdas se tiñen de blanco puro (`tint = 0xffffff`) y rebotan a $1.25\times$ durante 45 ms antes de convertirse en partículas.
+3. **Desintegración en Cascada (Micro-Stagger):** Impacto Alto / Esfuerzo Medio. Secuenciar las partículas celda por celda ($i \times 18\text{ ms}$) a lo largo de la fila.
+4. **Onda de Choque Anular (Shockwave Ring):** Impacto Medio-Alto / Esfuerzo Medio. Anillo expansivo ($0 \to 130\text{px}$ en 280 ms).
+5. **Punch en Texto Flotante de Puntos:** Impacto Medio / Esfuerzo Bajo. Escala con rebote `scale(0.4) -> scale(1.3) -> scale(1.0)` en 100 ms antes de ascender.
+
+#### 4. El detalle que más se nota y menos cuesta
+**"Escalar el Tono (Pitch Ramp) por `s.combo` + Flash Blanco de 45 ms en Celdas"**. Requiere menos de 15 líneas de código y transforma de inmediato la adicción al juego.
+
+---
+Guardé `lesson_webaudio_game_feel_combos` en el vault — responde 'scrap' para borrarla.

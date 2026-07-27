@@ -23,7 +23,9 @@ export function nuevaPartida({ azar = Math.random, monedas = 120, mejor = 0 } = 
     mejor,
     nivel: 1,
     xp: 0,
-    poderes: { bomba: 0, rayo: 0, lampara: 0 },
+    // Arranca CON poderes. Con cero, un jugador nuevo termina su primera
+    // partida sin haber usado ninguno y no sabe que existen.
+    poderes: { bomba: 1, rayo: 0, lampara: 1 },
     jefe: null,          // { id, nombre, turnosRestantes, ... }
     jefesVencidos: [],
     proximoJefeEn: PRIMER_UMBRAL,
@@ -119,7 +121,7 @@ export function jugar(estado, indicePieza, celda) {
     const multiplicador = multiplicadorCombo(siguiente.combo);
     const base = puntosPorLineas(lineas.cantidad);
     ganados += Math.round(base * multiplicador);
-    siguiente.monedas += monedasPorLineas(lineas.cantidad);
+    siguiente.monedas += monedasPorLineas(lineas.cantidad, siguiente.combo);
     sucesos.push({
       tipo: 'lineas-limpiadas',
       cantidad: lineas.cantidad,
@@ -301,7 +303,9 @@ export function usarLampara(estado) {
 }
 
 export function comprar(estado, articulo) {
-  const precios = { bomba: 40, rayo: 60, revolver: 80, lampara: 50 };
+  // Precios de "compralo ahora", no de "ahorra media partida". El poder tiene
+  // que estar al alcance en el momento en que lo necesitas.
+  const precios = { bomba: 15, rayo: 20, revolver: 10, lampara: 12 };
   const precio = precios[articulo];
   if (precio === undefined) return { estado, sucesos: [{ tipo: 'rechazado', razon: 'no-existe' }] };
   if (estado.monedas < precio) {
