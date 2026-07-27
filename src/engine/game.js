@@ -11,7 +11,7 @@ import {
   puntosPorColocar, puntosPorLineas, monedasPorLineas, aplicarXp, xpNecesaria,
   multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO,
 } from './scoring.js';
-import { tocaJefe, elegirJefe, activar, avanzar, PRIMER_UMBRAL } from '../bosses/index.js';
+import { tocaJefe, elegirJefe, activar, avanzar, PRIMER_UMBRAL, PREMIO_JEFE } from '../bosses/index.js';
 
 export function nuevaPartida({ azar = Math.random, monedas = 120, mejor = 0 } = {}) {
   return {
@@ -178,6 +178,12 @@ export function jugar(estado, indicePieza, celda) {
     const r = avanzar(siguiente, siguiente.azar);
     siguiente = r.estado;
     sucesos.push(...r.sucesos);
+    // Los jefes ahora PAGAN. Antes daban cero monedas: aguantar al mas duro
+    // del juego valia lo mismo que colocar una pieza suelta.
+    for (const s2 of r.sucesos) {
+      if (s2.tipo === 'jefe-vencido') siguiente.monedas += PREMIO_JEFE.vencido;
+      if (s2.tipo === 'cuota-premio') siguiente.monedas += PREMIO_JEFE.cuota;
+    }
   }
 
   // ¿Entra uno nuevo? Se revisa despues de puntuar, para que la jugada que
@@ -185,6 +191,7 @@ export function jugar(estado, indicePieza, celda) {
   if (tocaJefe(siguiente)) {
     const r = activar(siguiente, elegirJefe(siguiente.jefesVencidos, siguiente.azar), siguiente.azar);
     siguiente = r.estado;
+    siguiente.monedas += PREMIO_JEFE.entra;   // te dan con que pelear
     sucesos.push(...r.sucesos);
   }
 
@@ -223,7 +230,15 @@ export function usarPoder(estado, tipo, celda) {
   }
 
   // Un poder nunca borra las celdas del jefe: para eso hay que aguantarlo.
-  const borrables = objetivo.filter((c) => estado.tablero[c] !== BLOQUEADA);
+  // Y solo cuentan las celdas con algo: bombardear aire gastaba el poder igual
+  // y encima regalaba 80 puntos. El mismo criterio que ya usa la lampara —
+  // cobrar por nada es una estafa.
+  const borrables = objetivo.filter(
+    (c) => estado.tablero[c] !== BLOQUEADA && estado.tablero[c] !== null
+  );
+  if (borrables.length === 0) {
+    return { estado, sucesos: [{ tipo: 'rechazado', razon: 'nada-que-romper' }] };
+  }
   const siguiente = {
     ...estado,
     tablero: limpiar(estado.tablero, borrables),
@@ -302,10 +317,15 @@ export function usarLampara(estado) {
   };
 }
 
+/**
+ * Precios. UNA sola fuente: estaban escritos tambien a mano en index.html, y
+ * dos listas de precios que hay que acordarse de sincronizar terminan siempre
+ * desincronizadas.
+ */
+export const PRECIOS = { bomba: 15, rayo: 20, revolver: 10, lampara: 12 };
+
 export function comprar(estado, articulo) {
-  // Precios de "compralo ahora", no de "ahorra media partida". El poder tiene
-  // que estar al alcance en el momento en que lo necesitas.
-  const precios = { bomba: 15, rayo: 20, revolver: 10, lampara: 12 };
+  const precios = PRECIOS;
   const precio = precios[articulo];
   if (precio === undefined) return { estado, sucesos: [{ tipo: 'rechazado', razon: 'no-existe' }] };
   if (estado.monedas < precio) {

@@ -5,7 +5,8 @@ import {
 } from './board.js';
 import { FORMAS, repartir, repartirJugable, crearPieza, GRANDES } from './pieces.js';
 import { puntosPorLineas, puntosPorColocar, aplicarXp, xpNecesaria, multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO, monedasPorLineas } from './scoring.js';
-import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, buscarConsejo } from './game.js';
+import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, buscarConsejo, PRECIOS } from './game.js';
+import { PREMIO_JEFE } from '../bosses/index.js';
 
 // Azar fijo para que los tests no dependan de la suerte.
 const azarFijo = () => 0;
@@ -638,11 +639,44 @@ describe('combo con gracia', () => {
 });
 
 describe('economia de poderes', () => {
-  it('una linea paga lo suficiente para un poder barato', () => {
-    // El punto: querer un poder y poder comprarlo YA, no dentro de media partida
-    expect(monedasPorLineas(1)).toBeGreaterThanOrEqual(15);
-    const p = nuevaPartida({ azar: azarFijo, monedas: monedasPorLineas(1) });
-    expect(comprar(p, 'bomba').sucesos[0].tipo).toBe('comprado');
+  it('un poder esta al alcance en pocas limpiezas', () => {
+    // Se mide la REGLA, no el precio: querer un poder y poder comprarlo en el
+    // momento, no dentro de media partida. Fijar el numero exacto rompia el
+    // test en cada rebalanceo sin que nada estuviera mal.
+    const masBarato = Math.min(...Object.values(PRECIOS));
+    const limpiezasNecesarias = Math.ceil(masBarato / monedasPorLineas(1));
+    expect(limpiezasNecesarias).toBeLessThanOrEqual(3);
+  });
+
+  it('la jugada grande paga MUCHO mas que varias chicas', () => {
+    // Premia habilidad, no volumen: cuatro lineas de una vez valen mas que
+    // cuatro limpiezas de a una.
+    expect(monedasPorLineas(4)).toBeGreaterThan(monedasPorLineas(1) * 4);
+  });
+
+  it('los jefes pagan por aguantarlos', () => {
+    // Antes daban cero: aguantar al mas duro del juego valia lo mismo que
+    // colocar una pieza suelta, y encima te dejaba el tablero peor.
+    expect(PREMIO_JEFE.entra).toBeGreaterThan(0);
+    expect(PREMIO_JEFE.vencido).toBeGreaterThan(0);
+    expect(PREMIO_JEFE.cuota).toBeGreaterThan(PREMIO_JEFE.vencido);
+  });
+
+  it('un poder sobre celdas vacias NO se cobra', () => {
+    const p = { ...nuevaPartida({ azar: azarFijo }), poderes: { bomba: 1, rayo: 0, lampara: 0 } };
+    const r = usarPoder(p, 'bomba', indice(4, 4));   // tablero vacio
+    expect(r.sucesos[0]).toMatchObject({ tipo: 'rechazado', razon: 'nada-que-romper' });
+    expect(r.estado.poderes.bomba).toBe(1);
+    expect(r.estado.puntaje).toBe(p.puntaje);   // tampoco regala los 80 puntos
+  });
+
+  it('un poder sobre celdas con bloques SI se cobra', () => {
+    const t = Array(64).fill('rosa');
+    const p = { ...nuevaPartida({ azar: azarFijo }), tablero: t,
+                poderes: { bomba: 1, rayo: 0, lampara: 0 } };
+    const r = usarPoder(p, 'bomba', indice(4, 4));
+    expect(r.sucesos[0].tipo).toBe('poder-usado');
+    expect(r.estado.poderes.bomba).toBe(0);
   });
 
   it('la racha paga mas monedas, con techo', () => {

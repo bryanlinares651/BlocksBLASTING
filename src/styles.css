@@ -866,3 +866,15 @@ html[data-tema="jugoso"] .pieza-flotante i {
 @media (max-width: 380px) {
   .celebra { font-size: calc(48px * var(--escala, 1)); }
 }
+
+/* Cuenta del poder cuando esta en cero pero te alcanza: muestra el precio con
+   la moneda, para que se lea "compralo" y no "tenes 15". */
+.cuenta[data-precio="1"]::before {
+  content: "🪙 ";
+  font-size: 11px;
+}
+
+.cuenta[data-precio="1"] {
+  font-size: 12px;
+  opacity: 0.85;
+}

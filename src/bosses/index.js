@@ -168,6 +168,12 @@ export const LA_CUOTA = {
   },
 };
 
+/**
+ * Lo que pagan los jefes. Antes: nada. Aguantar al mas duro del juego valia
+ * lo mismo que colocar una pieza suelta, y encima te dejaba el tablero peor.
+ */
+export const PREMIO_JEFE = { entra: 40, vencido: 40, cuota: 80 };
+
 export const JEFES = [
   EL_BLOQUEADOR, EL_BASURERO, EL_TACANO, EL_GIGANTE, EL_ENCOGEDOR, LA_CUOTA,
 ];

@@ -1,6 +1,6 @@
 // Une el motor, la pantalla y el sonido. Aca vive la interaccion.
 
-import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, xpNecesaria } from './engine/game.js';
+import { nuevaPartida, jugar, usarPoder, comprar, previsualizar, usarLampara, xpNecesaria, PRECIOS } from './engine/game.js';
 import { LADO, coordenadas, indice, celdasDe, BLOQUEADA } from './engine/board.js';
 import { Escenario } from './render/stage.js';
 import { flotarPuntos } from './render/effects.js';
@@ -88,12 +88,26 @@ function pintarMarcadores() {
   $('xp-texto').textContent = `${estado.xp} / ${falta}`;
   $('barra').style.width = `${Math.min(100, (estado.xp / falta) * 100)}%`;
 
-  $('cuenta-bomba').textContent = estado.poderes.bomba;
-  $('cuenta-rayo').textContent = estado.poderes.rayo;
-  $('cuenta-lampara').textContent = estado.poderes.lampara ?? 0;
-  $('btn-bomba').disabled = estado.poderes.bomba === 0;
-  $('btn-rayo').disabled = estado.poderes.rayo === 0;
-  $('btn-lampara').disabled = !estado.poderes.lampara;
+  // Un poder en cero pero con monedas para comprarlo NO se deshabilita: muestra
+  // el precio y lo compra de un toque. Antes el boton quedaba muerto con el
+  // banco lleno y habia que bajar a la tienda — 332px de scroll para algo que
+  // podias pagar sin moverte.
+  for (const [id, tipo] of [['bomba', 'bomba'], ['rayo', 'rayo'], ['lampara', 'lampara']]) {
+    const cuantos = estado.poderes[tipo] ?? 0;
+    const precio = PRECIOS[tipo];
+    const alcanza = estado.monedas >= precio;
+    const btn = $(`btn-${id}`);
+    const cuenta = $(`cuenta-${id}`);
+    if (cuantos > 0) {
+      cuenta.textContent = cuantos;
+      delete cuenta.dataset.precio;
+      btn.disabled = false;
+    } else {
+      cuenta.textContent = precio;
+      cuenta.dataset.precio = '1';
+      btn.disabled = !alcanza;
+    }
+  }
 }
 
 function pintarJefe() {
@@ -287,6 +301,20 @@ function procesar(sucesos, tableroAntes) {
         sonido.basura();
         break;
 
+      case 'cuota-cumplida':
+        fiesta.mensaje('¡CUOTA CUMPLIDA!', 'grande');
+        sonido.jefeVencido();
+        break;
+
+      case 'cuota-premio':
+        aviso(`Cuota cumplida · +${80} monedas`);
+        break;
+
+      case 'cuota-fallada':
+        aviso(`No llegaste a la cuota · ${s.bloques} bloques de castigo`);
+        sonido.basura();
+        break;
+
       case 'poder-usado':
         sonido.poder();
         break;
@@ -300,6 +328,8 @@ function procesar(sucesos, tableroAntes) {
         sonido.rechazo();
         if (s.razon === 'no-cabe') aviso('Ahí no cabe');
         if (s.razon === 'sin-monedas') aviso('Te faltan monedas');
+        if (s.razon === 'nada-que-romper') aviso('Ahí no hay nada que romper');
+        if (s.razon === 'jefe-la-bloquea') aviso('El jefe solo te deja la primera');
         break;
     }
   }
@@ -501,6 +531,11 @@ async function iniciar() {
   const guardado = cargarGuardado();
   estado = nuevaPartida({ monedas: guardado.monedas ?? 120, mejor: guardado.mejor ?? 0 });
 
+  // Los precios de la tienda salen del motor, no escritos a mano en el HTML:
+  // dos listas que hay que sincronizar terminan siempre desincronizadas.
+  for (const el of document.querySelectorAll('[data-precio-de]')) {
+    el.textContent = PRECIOS[el.dataset.precioDe];
+  }
   aplicarCss(temaActual);
   escenario = await new Escenario($('tablero'), { reducido, tema: temaActual }).iniciar();
   flotante = new PiezaFlotante($('flotantes'));
@@ -553,7 +588,17 @@ async function iniciar() {
   for (const [id, tipo] of [['btn-bomba', 'bomba'], ['btn-rayo', 'rayo']]) {
     $(id).addEventListener('click', () => {
       sonido.despertar();
-      if (!estado.poderes[tipo]) return;
+      // Sin unidades pero con monedas: compra y sigue derecho a apuntar.
+      if (!estado.poderes[tipo]) {
+        const r = comprar(estado, tipo);
+        if (!r.sucesos.some((x) => x.tipo === 'comprado')) {
+          aviso('Te faltan monedas');
+          return;
+        }
+        estado = r.estado;
+        pintarMarcadores();
+        guardar();
+      }
       apuntando = apuntando === tipo ? null : tipo;
       document.querySelectorAll('.poder').forEach((b) => delete b.dataset.apuntando);
       if (apuntando) {
@@ -568,6 +613,12 @@ async function iniciar() {
 
   $('btn-lampara').addEventListener('click', () => {
     sonido.despertar();
+    if (!estado.poderes.lampara) {
+      const compra = comprar(estado, 'lampara');
+      if (!compra.sucesos.some((x) => x.tipo === 'comprado')) { aviso('Te faltan monedas'); return; }
+      estado = compra.estado;
+      pintarMarcadores();
+    }
     const r = usarLampara(estado);
     estado = r.estado;
     procesar(r.sucesos, estado.tablero);

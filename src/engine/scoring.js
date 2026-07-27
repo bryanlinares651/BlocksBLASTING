@@ -23,8 +23,8 @@ export function puntosPorLineas(lineas) {
  * financia un poder en el acto — que es cuando de verdad lo querias.
  */
 export function monedasPorLineas(lineas, combo = 1) {
-  if (lineas <= 0) return 2;
-  const base = lineas * 15;
+  if (lineas <= 0) return 3;
+  const base = lineas * lineas * 10;
   const porRacha = Math.min(2.5, 1 + Math.max(0, combo - 1) * 0.25);
   return Math.round(base * porRacha);
 }
