@@ -7,11 +7,11 @@ import { flotarPuntos } from './render/effects.js';
 import { PiezaFlotante } from './render/floating.js';
 import { Celebracion } from './render/celebracion.js';
 import { PALETA, PALETA_CSS, COLORES_JEFE, intensidad } from './render/theme.js';
+import { cargarGuardado, guardarPartida, recargarTrasGuardar } from './persistence.js';
 import { Sonido } from './audio/sfx.js';
 import { TEMAS, temaPorId, siguienteTema, aplicarCss, paletaDe } from './render/temas.js';
 
 const $ = (id) => document.getElementById(id);
-const GUARDADO = 'nova-blocks-v1';
 const reducido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const sonido = new Sonido();
@@ -26,31 +26,8 @@ let arrastre = null;    // { pieza, celda } mientras el dedo esta abajo
 
 // ---------------------------------------------------------------- persistencia
 
-function cargarGuardado() {
-  try {
-    const crudo = localStorage.getItem(GUARDADO);
-    if (!crudo) return {};
-    const d = JSON.parse(crudo);
-    // Si el guardado esta corrupto o es de otra version, se arranca de cero en
-    // vez de romper. El record va aparte para no perderlo nunca.
-    return {
-      mejor: Number.isFinite(d.mejor) ? d.mejor : 0,
-      monedas: Number.isFinite(d.monedas) ? d.monedas : 120,
-    };
-  } catch {
-    return {};
-  }
-}
-
 function guardar() {
-  try {
-    localStorage.setItem(GUARDADO, JSON.stringify({
-      mejor: estado.mejor,
-      monedas: estado.monedas,
-    }));
-  } catch {
-    // Modo privado de Safari puede negar el guardado. No es motivo para romper.
-  }
+  return estado ? guardarPartida(estado, temaActual.id) : false;
 }
 
 // ---------------------------------------------------------------- interfaz
@@ -529,7 +506,8 @@ function soltarArrastre() {
 
 async function iniciar() {
   const guardado = cargarGuardado();
-  estado = nuevaPartida({ monedas: guardado.monedas ?? 120, mejor: guardado.mejor ?? 0 });
+  estado = guardado.estado;
+  temaActual = temaPorId(guardado.tema) ?? TEMAS[0];
 
   // Los precios de la tienda salen del motor, no escritos a mano en el HTML:
   // dos listas que hay que sincronizar terminan siempre desincronizadas.
@@ -542,6 +520,10 @@ async function iniciar() {
   fiesta = new Celebracion($('flotantes'), { reducido });
   window.addEventListener('resize', () => flotante.redimensionar(escenario.ladoCeldaEnPantalla()));
   pintarTodo();
+  pintarCombo(estado.combo);
+  if (estado.terminada) mostrarFin();
+  else estadoTexto(estado.jefe ? estado.jefe.nombre : 'Tu turno', estado.jefe ? 'malo' : '');
+  guardar();
 
   const lienzo = escenario.app.canvas;
 
@@ -654,6 +636,7 @@ async function iniciar() {
     pintarBandeja();
     sonido.subirNivel();
     aviso(`${temaActual.nombre} · ${temaActual.lema}`);
+    guardar();
   });
 
   $('btn-sonido').addEventListener('click', () => {
@@ -691,22 +674,15 @@ async function iniciar() {
   };
 }
 
-/**
- * Recargar sola cuando llega una version nueva.
- *
- * Sin esto, el service worker sirve la copia guardada y lo nuevo recien aparece
- * a la SEGUNDA recarga: se publica un arreglo y el telefono sigue mostrando lo
- * viejo. Aca se puede recargar sin avisar porque no hay nada que perder: el
- * record y las monedas viven en localStorage, no en la pagina. El candado evita
- * el bucle si el navegador avisa dos veces.
- */
+// El checkpoint debe estar escrito antes de abandonar este documento. Si el
+// almacenamiento esta bloqueado seguimos jugando en memoria hasta abrir de nuevo.
 if ('serviceWorker' in navigator) {
-  let recargando = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (recargando) return;
-    recargando = true;
-    location.reload();
-  });
+  navigator.serviceWorker.addEventListener('controllerchange',
+    recargarTrasGuardar(() => estado, guardar, () => location.reload()));
 }
+window.addEventListener('pagehide', guardar);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') guardar();
+});
 
 iniciar();

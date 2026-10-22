@@ -6,7 +6,7 @@ import {
   crearTablero, puedeColocar, colocar, lineasCompletas, limpiar,
   hayMovimiento, simular, BLOQUEADA,
 } from './board.js';
-import { repartir, repartirJugable, formasDisponibles, NOMBRES, GRANDES } from './pieces.js';
+import { repartir, repartirJugable, NOMBRES, GRANDES } from './pieces.js';
 import {
   puntosPorColocar, puntosPorLineas, monedasPorLineas, aplicarXp, xpNecesaria,
   multiplicadorCombo, BONUS_TABLERO_LIMPIO, GRACIA_COMBO,
@@ -39,6 +39,12 @@ export function nuevaPartida({ azar = Math.random, monedas = 120, mejor = 0 } = 
   };
 }
 
+/** Toda suma de puntos conserva el record, incluso sin otra colocacion. */
+function sumarPuntos(estado, cantidad) {
+  const puntaje = estado.puntaje + cantidad;
+  return { ...estado, puntaje, mejor: Math.max(estado.mejor, puntaje) };
+}
+
 /** Cuantas piezas reparte este turno — el jefe Tacaño baja el numero. */
 function cuantasPiezas(estado) {
   return estado.jefe?.piezasPorTurno ?? 3;
@@ -58,7 +64,7 @@ function rellenarSiHaceFalta(estado, sucesos) {
   return {
     ...estado,
     piezas: repartirJugable(estado.tablero, puedeColocarEnAlgunLado,
-                            cuantasPiezas(estado), estado.azar, catalogo(estado)),
+                            cuantasPiezas(estado), estado.azar, catalogo(estado), 24, !!estado.jefe?.soloLaPrimera),
   };
 }
 
@@ -70,10 +76,20 @@ function puedeColocarEnAlgunLado(tablero, forma) {
   return false;
 }
 
+/** Una sola lista de indices legales para juego, preview, consejo y fin. */
+export function piezasHabilitadas(estado) {
+  const indices = estado.piezas.flatMap((p, i) => p.usada ? [] : [i]);
+  return estado.jefe?.soloLaPrimera ? indices.slice(0, 1) : indices;
+}
+
+export function quedanJugadas(estado) {
+  return hayMovimiento(estado.tablero, piezasHabilitadas(estado).map((i) => estado.piezas[i].forma));
+}
+
 /** Vista previa para pintar antes de soltar. No cambia nada. */
 export function previsualizar(estado, indicePieza, celda) {
   const pieza = estado.piezas[indicePieza];
-  if (!pieza || pieza.usada) return { valido: false, celdas: [], lineas: null };
+  if (estado.terminada || !piezasHabilitadas(estado).includes(indicePieza)) return { valido: false, celdas: [], lineas: null };
   return simular(estado.tablero, pieza.forma, celda);
 }
 
@@ -91,11 +107,8 @@ export function jugar(estado, indicePieza, celda) {
 
   // El Tacaño te deja ver las tres pero usar solo la primera sin gastar. Lo que
   // duele no es tener menos piezas, es no poder elegir cual.
-  if (estado.jefe?.soloLaPrimera) {
-    const primeraLibre = estado.piezas.findIndex((p) => !p.usada);
-    if (indicePieza !== primeraLibre) {
-      return { estado, sucesos: [{ tipo: 'rechazado', razon: 'jefe-la-bloquea' }] };
-    }
+  if (!piezasHabilitadas(estado).includes(indicePieza)) {
+    return { estado, sucesos: [{ tipo: 'rechazado', razon: 'jefe-la-bloquea' }] };
   }
 
   if (!puedeColocar(estado.tablero, pieza.forma, celda)) {
@@ -162,7 +175,7 @@ export function jugar(estado, indicePieza, celda) {
     });
   }
 
-  siguiente.puntaje = estado.puntaje + ganados;
+  siguiente = sumarPuntos(siguiente, ganados);
   const nivelado = aplicarXp({ nivel: estado.nivel, xp: estado.xp }, ganados);
   siguiente.nivel = nivelado.nivel;
   siguiente.xp = nivelado.xp;
@@ -170,7 +183,6 @@ export function jugar(estado, indicePieza, celda) {
     siguiente.monedas += nivelado.monedasExtra;
     sucesos.push({ tipo: 'subio-nivel', nivel: nivelado.nivel, monedas: nivelado.monedasExtra });
   }
-  if (siguiente.puntaje > siguiente.mejor) siguiente.mejor = siguiente.puntaje;
 
   // El jefe activo gasta su turno y aplica lo suyo; si se le acaba, se va y
   // revierte lo que dejo puesto.
@@ -199,7 +211,7 @@ export function jugar(estado, indicePieza, celda) {
   // y el Gigante de que catalogo salen, asi que primero tiene que estar
   // resuelto quien manda este turno.
   siguiente = rellenarSiHaceFalta(siguiente, sucesos);
-  siguiente.terminada = !hayMovimiento(siguiente.tablero, formasDisponibles(siguiente.piezas));
+  siguiente.terminada = !quedanJugadas(siguiente);
   if (siguiente.terminada) sucesos.push({ tipo: 'fin-del-juego', puntaje: siguiente.puntaje });
 
   return { estado: siguiente, sucesos };
@@ -240,12 +252,11 @@ export function usarPoder(estado, tipo, celda) {
     return { estado, sucesos: [{ tipo: 'rechazado', razon: 'nada-que-romper' }] };
   }
   const siguiente = {
-    ...estado,
+    ...sumarPuntos(estado, 80),
     tablero: limpiar(estado.tablero, borrables),
     poderes: { ...estado.poderes, [tipo]: estado.poderes[tipo] - 1 },
-    puntaje: estado.puntaje + 80,
   };
-  siguiente.terminada = !hayMovimiento(siguiente.tablero, formasDisponibles(siguiente.piezas));
+  siguiente.terminada = !quedanJugadas(siguiente);
   return {
     estado: siguiente,
     sucesos: [{ tipo: 'poder-usado', poder: tipo, celdas: borrables, en: celda }],
@@ -264,12 +275,8 @@ export function usarPoder(estado, tipo, celda) {
  */
 export function buscarConsejo(estado) {
   let mejor = null;
-  estado.piezas.forEach((pieza, indicePieza) => {
-    if (pieza.usada) return;
-    if (estado.jefe?.soloLaPrimera) {
-      const primera = estado.piezas.findIndex((p) => !p.usada);
-      if (indicePieza !== primera) return;
-    }
+  piezasHabilitadas(estado).forEach((indicePieza) => {
+    const pieza = estado.piezas[indicePieza];
     for (let celda = 0; celda < estado.tablero.length; celda++) {
       if (!puedeColocar(estado.tablero, pieza.forma, celda)) continue;
       const tras = colocar(estado.tablero, pieza.forma, celda, pieza.color);
@@ -334,8 +341,8 @@ export function comprar(estado, articulo) {
   const siguiente = { ...estado, monedas: estado.monedas - precio };
   if (articulo === 'revolver') {
     siguiente.piezas = repartirJugable(estado.tablero, puedeColocarEnAlgunLado,
-                                       cuantasPiezas(estado), estado.azar, catalogo(estado));
-    siguiente.terminada = !hayMovimiento(siguiente.tablero, formasDisponibles(siguiente.piezas));
+                                       cuantasPiezas(estado), estado.azar, catalogo(estado), 24, !!estado.jefe?.soloLaPrimera);
+    siguiente.terminada = !quedanJugadas(siguiente);
   } else {
     siguiente.poderes = { ...estado.poderes, [articulo]: estado.poderes[articulo] + 1 };
   }
