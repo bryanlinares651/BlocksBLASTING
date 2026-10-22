@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "npm run test:regression && vitest run",
+    "test:regression": "node --test --test-concurrency=1 scripts/regression-*.mjs",
     "test:watch": "vitest"
   },
   "keywords": [],

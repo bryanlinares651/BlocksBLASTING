@@ -7,6 +7,8 @@
 //     No hay forma de saltarlo desde la web, y por eso la vibracion va aparte:
 //     con el telefono en silencio, la vibracion es todo el feedback que queda.
 
+import { leer, escribir } from '../storage.js';
+
 const BASE = 320; // Hz, la nota de la que cuelga todo lo demas
 
 /**
@@ -31,8 +33,8 @@ export class Sonido {
   constructor() {
     this.ctx = null;
     this.maestro = null;
-    this.silenciado = localStorage.getItem('nova-silencio') === '1';
-    this.vibrar = localStorage.getItem('nova-vibrar') !== '0';
+    this.silenciado = leer('nova-silencio') === '1';
+    this.vibrar = leer('nova-vibrar') !== '0';
   }
 
   despertar() {
@@ -54,7 +56,7 @@ export class Sonido {
 
   alternarSilencio() {
     this.silenciado = !this.silenciado;
-    localStorage.setItem('nova-silencio', this.silenciado ? '1' : '0');
+    escribir('nova-silencio', this.silenciado ? '1' : '0');
     return this.silenciado;
   }
 

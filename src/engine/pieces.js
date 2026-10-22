@@ -67,7 +67,8 @@ export function repartir(cantidad = 3, azar = Math.random, desde = NOMBRES) {
 }
 
 /**
- * Reparte piezas garantizando que AL MENOS UNA entre en el tablero.
+ * Reparte piezas garantizando que una habilitada entre en el tablero.
+ * Con Tacaño solo se comprueba la primera; el rescate siempre ocupa ese lugar.
  *
  * Sin esto, el juego podia matarte por mala suerte: colocabas tus tres piezas,
  * te repartia tres nuevas al azar y si ninguna entraba, se acabo — sin que
@@ -80,10 +81,11 @@ export function repartir(cantidad = 3, azar = Math.random, desde = NOMBRES) {
  * devuelve un reparto cualquiera — ahi el tablero esta ahogado de verdad y
  * perder es legitimo.
  */
-export function repartirJugable(tablero, cabe, cantidad = 3, azar = Math.random, desde = NOMBRES, intentos = 24) {
+export function repartirJugable(tablero, cabe, cantidad = 3, azar = Math.random, desde = NOMBRES, intentos = 24, soloLaPrimera = false) {
   for (let i = 0; i < intentos; i++) {
     const piezas = repartir(cantidad, azar, desde);
-    if (piezas.some((p) => cabe(tablero, p.forma))) return piezas;
+    const habilitadas = soloLaPrimera ? piezas.slice(0, 1) : piezas;
+    if (habilitadas.some((p) => cabe(tablero, p.forma))) return piezas;
   }
 
   // Ningun reparto al azar sirvio: buscar explicitamente una forma que entre.
